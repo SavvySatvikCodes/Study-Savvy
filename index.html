@@ -430,6 +430,11 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             <span id="streakCount">0</span> day streak
         </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
+            <span id="authUser" style="display:none;font-size:10px;color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            <span id="syncStatus" style="display:none;font-size:10px;color:var(--accent);font-weight:600;"></span>
+            <button id="authBtn" onclick="window._fireSignIn && window._fireSignIn()" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--text2);font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;">Sign in with Google</button>
+        </div>
     </div>
 </div>
 
@@ -647,6 +652,99 @@ function dismissInstall() {
 }
 </script>
 
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyD5w3MVOM0V5S_hkPZwxtEkN1VZ-HWYSKA",
+    authDomain: "study-savvy-fr.firebaseapp.com",
+    projectId: "study-savvy-fr",
+    storageBucket: "study-savvy-fr.firebasestorage.app",
+    messagingSenderId: "866981620017",
+    appId: "1:866981620017:web:a71962391d05b05c2b2810"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db_fire = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+let currentUser = null;
+let firestoreUnsub = null;
+let syncTimeout = null;
+
+// Expose to global scope so non-module scripts can call them
+window._fireSignIn = async function() {
+    try {
+        await signInWithPopup(auth, provider);
+    } catch(e) {
+        window.notify('Sign-in failed: ' + e.message);
+    }
+};
+window._fireSignOut = async function() {
+    await signOut(auth);
+};
+
+// Save db to Firestore (debounced 2s)
+window._fireSave = function(dbData) {
+    if (!currentUser) return;
+    clearTimeout(syncTimeout);
+    syncTimeout = setTimeout(async function() {
+        try {
+            await setDoc(doc(db_fire, 'users', currentUser.uid), { data: JSON.stringify(dbData) });
+        } catch(e) {
+            console.warn('Firestore save failed:', e);
+        }
+    }, 2000);
+};
+
+onAuthStateChanged(auth, function(user) {
+    currentUser = user;
+    if (user) {
+        // Update header UI
+        document.getElementById('authBtn').textContent = 'Sign Out';
+        document.getElementById('authBtn').onclick = window._fireSignOut;
+        document.getElementById('authUser').textContent = user.displayName || user.email;
+        document.getElementById('authUser').style.display = 'block';
+        document.getElementById('syncStatus').textContent = 'Syncing...';
+        document.getElementById('syncStatus').style.display = 'block';
+
+        // Listen for changes from Firestore and merge into local db
+        if (firestoreUnsub) firestoreUnsub();
+        firestoreUnsub = onSnapshot(doc(db_fire, 'users', user.uid), function(snap) {
+            if (snap.exists()) {
+                try {
+                    var cloudData = JSON.parse(snap.data().data || '{}');
+                    // Merge: cloud wins for days not in local
+                    var local = window._getDB ? window._getDB() : {};
+                    var merged = Object.assign({}, cloudData, local);
+                    if (window._setDB) window._setDB(merged);
+                    document.getElementById('syncStatus').textContent = 'Synced';
+                    setTimeout(function(){ document.getElementById('syncStatus').textContent = ''; document.getElementById('syncStatus').style.display='none'; }, 2000);
+                } catch(e) {
+                    console.warn('Firestore parse error:', e);
+                }
+            } else {
+                // No cloud data yet — push local up
+                if (window._getDB) window._fireSave(window._getDB());
+                document.getElementById('syncStatus').textContent = 'Synced';
+                setTimeout(function(){ document.getElementById('syncStatus').textContent = ''; document.getElementById('syncStatus').style.display='none'; }, 2000);
+            }
+        });
+    } else {
+        // Signed out
+        document.getElementById('authBtn').textContent = 'Sign in with Google';
+        document.getElementById('authBtn').onclick = window._fireSignIn;
+        document.getElementById('authUser').style.display = 'none';
+        document.getElementById('syncStatus').style.display = 'none';
+        if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+    }
+});
+</script>
+
 <script>
 const CATS = [
     { id: 'dayStudy',     label: 'Active Circuit', hours: '9AM-6PM',  color: '#00c49a', activeClass: 'active-day' },
@@ -660,7 +758,18 @@ let db = {}, currentMode = 'stopwatch', currentCat = getAutoCat(), running = fal
     countdownTotal = 0, aimOpen = true, compareDay = new Date().getDay(), charts = {};
 
 function loadDB(){ try { db = JSON.parse(localStorage.getItem(DB_KEY)||'{}'); } catch(e){ db={}; } }
-function saveDB(){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+function saveDB(){
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    if (window._fireSave) window._fireSave(db);
+}
+function _getDB(){ return db; }
+function _setDB(newDb){
+    db = newDb;
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    loadAims(); renderProgress(); updateStreak(); buildDaySelector(); renderSummary();
+}
+window._getDB = _getDB;
+window._setDB = _setDB;
 function getTodayKey(){ const d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
 function getOrCreate(k){ if(!db[k]) db[k]={aims:{dayStudy:0,eveningStudy:0,career:0},actual:{dayStudy:0,eveningStudy:0,career:0},sessions:[]}; return db[k]; }
 function pad2(n){ return String(n).padStart(2,'0'); }
