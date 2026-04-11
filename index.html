@@ -551,6 +551,29 @@
 
     <!-- EXPORT -->
     <div class="panel" id="panel-export">
+        <div class="card export-card" id="accountCard">
+            <div class="export-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                Account & Sync
+            </div>
+            <div id="accountSignedOut">
+                <div class="export-desc">Sign in with Google to sync your data across all your devices automatically.</div>
+                <button class="btn btn-accent btn-sm" onclick="window._fireSignIn && window._fireSignIn()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                    Sign in with Google
+                </button>
+            </div>
+            <div id="accountSignedIn" style="display:none;">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                    <div>
+                        <div id="accountName" style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px;"></div>
+                        <div id="accountEmail" style="font-size:11px;color:var(--text3);"></div>
+                        <div id="accountSyncStatus" style="font-size:11px;color:var(--accent);margin-top:4px;font-weight:600;"></div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="window._fireSignOut && window._fireSignOut()">Sign Out</button>
+                </div>
+            </div>
+        </div>
         <div class="export-grid">
             <div class="card export-card">
                 <div class="export-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>This Week</div>
@@ -711,6 +734,12 @@ onAuthStateChanged(auth, function(user) {
         document.getElementById('authUser').style.display = 'block';
         document.getElementById('syncStatus').textContent = 'Syncing...';
         document.getElementById('syncStatus').style.display = 'block';
+        // Update export tab account card
+        document.getElementById('accountSignedOut').style.display = 'none';
+        document.getElementById('accountSignedIn').style.display = 'block';
+        document.getElementById('accountName').textContent = user.displayName || 'Signed in';
+        document.getElementById('accountEmail').textContent = user.email;
+        document.getElementById('accountSyncStatus').textContent = 'Syncing...';
 
         // Listen for changes from Firestore and merge into local db
         if (firestoreUnsub) firestoreUnsub();
@@ -723,7 +752,8 @@ onAuthStateChanged(auth, function(user) {
                     var merged = Object.assign({}, cloudData, local);
                     if (window._setDB) window._setDB(merged);
                     document.getElementById('syncStatus').textContent = 'Synced';
-                    setTimeout(function(){ document.getElementById('syncStatus').textContent = ''; document.getElementById('syncStatus').style.display='none'; }, 2000);
+                    document.getElementById('accountSyncStatus').textContent = 'Synced';
+                    setTimeout(function(){ document.getElementById('syncStatus').textContent = ''; document.getElementById('syncStatus').style.display='none'; document.getElementById('accountSyncStatus').textContent = 'All data synced'; }, 2000);
                 } catch(e) {
                     console.warn('Firestore parse error:', e);
                 }
@@ -731,7 +761,8 @@ onAuthStateChanged(auth, function(user) {
                 // No cloud data yet — push local up
                 if (window._getDB) window._fireSave(window._getDB());
                 document.getElementById('syncStatus').textContent = 'Synced';
-                setTimeout(function(){ document.getElementById('syncStatus').textContent = ''; document.getElementById('syncStatus').style.display='none'; }, 2000);
+                document.getElementById('accountSyncStatus').textContent = 'Synced';
+                setTimeout(function(){ document.getElementById('syncStatus').textContent = ''; document.getElementById('syncStatus').style.display='none'; document.getElementById('accountSyncStatus').textContent = 'All data synced'; }, 2000);
             }
         });
     } else {
@@ -740,6 +771,9 @@ onAuthStateChanged(auth, function(user) {
         document.getElementById('authBtn').onclick = window._fireSignIn;
         document.getElementById('authUser').style.display = 'none';
         document.getElementById('syncStatus').style.display = 'none';
+        // Update export tab account card
+        document.getElementById('accountSignedOut').style.display = 'block';
+        document.getElementById('accountSignedIn').style.display = 'none';
         if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
     }
 });
