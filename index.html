@@ -747,10 +747,21 @@ onAuthStateChanged(auth, function(user) {
             if (snap.exists()) {
                 try {
                     var cloudData = JSON.parse(snap.data().data || '{}');
-                    // Merge: cloud wins for days not in local
                     var local = window._getDB ? window._getDB() : {};
-                    var merged = Object.assign({}, cloudData, local);
+                    // Smart merge: for each day, take whichever version has more total actual minutes
+                    var merged = Object.assign({}, cloudData);
+                    Object.keys(local).forEach(function(k) {
+                        if (!merged[k]) {
+                            merged[k] = local[k];
+                        } else {
+                            var localMins = ['dayStudy','eveningStudy','career'].reduce(function(s,c){ return s+((local[k].actual&&local[k].actual[c])||0); }, 0);
+                            var cloudMins = ['dayStudy','eveningStudy','career'].reduce(function(s,c){ return s+((merged[k].actual&&merged[k].actual[c])||0); }, 0);
+                            if (localMins > cloudMins) merged[k] = local[k];
+                        }
+                    });
                     if (window._setDB) window._setDB(merged);
+                    // Push the merged result back up so all devices converge
+                    if (window._fireSave) window._fireSave(merged);
                     document.getElementById('syncStatus').textContent = 'Synced';
                     document.getElementById('accountSyncStatus').textContent = 'Synced';
                     setTimeout(function(){ document.getElementById('syncStatus').textContent = ''; document.getElementById('syncStatus').style.display='none'; document.getElementById('accountSyncStatus').textContent = 'All data synced'; }, 2000);
