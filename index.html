@@ -413,6 +413,7 @@
             .summary-grid { grid-template-columns: 1fr; }
             .header { grid-template-columns: 1fr auto; }
             .header-right { display: none; }
+            .btn-pip { display: none; }
         }
     </style>
 </head>
@@ -1326,6 +1327,64 @@ async function togglePip() {
         notify('Could not open PiP window.');
     }
 }
+
+/* ── SLEEP DETECTION ── */
+var SLEEP_THRESHOLD_MS = 15 * 60 * 1000; // 15 min gap = treat as sleep/hibernate
+var lastTickTime = Date.now();
+
+// Wrap tick to detect sleep gaps
+var _origTick = tick;
+tick = function() {
+    var now = Date.now();
+    var gap = now - lastTickTime;
+    lastTickTime = now;
+    if (running && gap > SLEEP_THRESHOLD_MS) {
+        // Device woke after a long gap — stop and save only what was tracked before sleep
+        clearInterval(interval);
+        running = false;
+        // elapsedMs holds the time up to the last tick before sleep, which is correct
+        var minsToSave = Math.round(elapsedMs / 60000);
+        if (minsToSave > 0) {
+            recordSession(currentCat, minsToSave);
+            notify('Auto-stopped after sleep — +' + minsToHours(minsToSave) + ' saved');
+        } else {
+            notify('Timer stopped — session too short to save');
+        }
+        elapsedMs = 0; startTime = null;
+        document.getElementById('startStopBtn').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
+        document.getElementById('startStopBtn').style.background = 'var(--accent)';
+        document.getElementById('timerDisplay').textContent = '00:00:00';
+        document.getElementById('timerDisplay').classList.remove('running');
+        if (currentMode === 'pomodoro') { document.getElementById('pomStatus').textContent = ''; }
+        return;
+    }
+    _origTick();
+};
+
+// Also catch wakeup via visibilitychange (tab switch or screen unlock)
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && running) {
+        var gap = Date.now() - lastTickTime;
+        if (gap > SLEEP_THRESHOLD_MS) {
+            clearInterval(interval);
+            running = false;
+            var minsToSave = Math.round(elapsedMs / 60000);
+            if (minsToSave > 0) {
+                recordSession(currentCat, minsToSave);
+                notify('Auto-stopped after sleep — +' + minsToHours(minsToSave) + ' saved');
+            } else {
+                notify('Timer stopped — session too short to save');
+            }
+            elapsedMs = 0; startTime = null;
+            document.getElementById('startStopBtn').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
+            document.getElementById('startStopBtn').style.background = 'var(--accent)';
+            document.getElementById('timerDisplay').textContent = '00:00:00';
+            document.getElementById('timerDisplay').classList.remove('running');
+            if (currentMode === 'pomodoro') { document.getElementById('pomStatus').textContent = ''; }
+        }
+    }
+    lastTickTime = Date.now();
+});
 
 function init(){
     loadDB(); updateHeaderClock(); setInterval(updateHeaderClock,1000);
