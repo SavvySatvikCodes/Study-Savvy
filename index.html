@@ -462,6 +462,9 @@
                         <button class="mode-btn" id="modeTimer" onclick="setMode('timer')">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 2h4M12 14l3-3M12 22a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"/></svg>Timer
                         </button>
+                        <button class="mode-btn" id="modePomodoro" onclick="setMode('pomodoro')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/><path d="M8 2l2 2M16 2l-2 2"/></svg>Pomodoro
+                        </button>
                     </div>
                     <div class="cat-selector" id="catSelector"></div>
                     <div class="countdown-row" id="countdownRow" style="display:none;">
@@ -469,6 +472,26 @@
                         <span class="countdown-sep">h</span>
                         <input type="number" class="countdown-input" id="cdM" min="0" max="59" value="25">
                         <span class="countdown-sep">m</span>
+                    </div>
+                    <!-- Pomodoro settings -->
+                    <div id="pomodoroRow" style="display:none;flex-direction:column;gap:8px;margin-bottom:10px;">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;">
+                            <div style="display:flex;align-items:center;gap:4px;">
+                                <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Work</span>
+                                <input type="number" class="countdown-input" id="pomWork" min="1" max="120" value="25">
+                                <span class="countdown-sep">m</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:4px;">
+                                <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Break</span>
+                                <input type="number" class="countdown-input" id="pomBreak" min="1" max="60" value="5">
+                                <span class="countdown-sep">m</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:4px;">
+                                <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Cycles</span>
+                                <input type="number" class="countdown-input" id="pomCycles" min="1" max="20" value="4">
+                            </div>
+                        </div>
+                        <div id="pomStatus" style="font-size:11px;color:var(--accent);font-weight:600;text-align:center;letter-spacing:0.5px;min-height:16px;"></div>
                     </div>
                     <div class="timer-display" id="timerDisplay">00:00:00</div>
                     <div class="timer-controls">
@@ -495,7 +518,7 @@
                             <div>
                                 <div class="aim-row">
                                     <div class="aim-dot" style="background:var(--cat-day);"></div>
-                                    <div class="aim-row-label">Active Circuit<span>9AM - 6PM</span></div>
+                                    <div class="aim-row-label">Day Study<span>9AM - 6PM</span></div>
                                     <div class="input-wrap" style="flex:1;">
                                         <input type="number" step="0.1" min="0" class="input" id="aim-dayStudy" placeholder="0" style="padding-right:40px;">
                                         <span class="input-suffix">hrs</span>
@@ -506,7 +529,7 @@
                             <div>
                                 <div class="aim-row">
                                     <div class="aim-dot" style="background:var(--cat-evening);"></div>
-                                    <div class="aim-row-label">Closed Loop<span>6PM - 12AM</span></div>
+                                    <div class="aim-row-label">Evening Study<span>6PM - 12AM</span></div>
                                     <div class="input-wrap" style="flex:1;">
                                         <input type="number" step="0.1" min="0" class="input" id="aim-eveningStudy" placeholder="0" style="padding-right:40px;">
                                         <span class="input-suffix">hrs</span>
@@ -792,8 +815,8 @@ onAuthStateChanged(auth, function(user) {
 
 <script>
 const CATS = [
-    { id: 'dayStudy',     label: 'Active Circuit', hours: '9AM-6PM',  color: '#00c49a', activeClass: 'active-day' },
-    { id: 'eveningStudy', label: 'Closed Loop',    hours: '6PM-12AM', color: '#d63384', activeClass: 'active-evening' },
+    { id: 'dayStudy',     label: 'Day Study',     hours: '9AM-6PM',  color: '#00c49a', activeClass: 'active-day' },
+    { id: 'eveningStudy', label: 'Evening Study',  hours: '6PM-12AM', color: '#d63384', activeClass: 'active-evening' },
     { id: 'career',       label: 'Career Work',    hours: 'Anytime',  color: '#d4a017', activeClass: 'active-career' }
 ];
 const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -875,12 +898,90 @@ function renderCatBtns(){
     });
 }
 
-function setMode(mode){ if(running){notify('Stop the timer first');return;} currentMode=mode; document.getElementById('modeStopwatch').classList.toggle('active',mode==='stopwatch'); document.getElementById('modeTimer').classList.toggle('active',mode==='timer'); document.getElementById('countdownRow').style.display=mode==='timer'?'flex':'none'; resetTimer(); }
+function setMode(mode){
+    if(running){notify('Stop the timer first');return;}
+    currentMode=mode;
+    document.getElementById('modeStopwatch').classList.toggle('active',mode==='stopwatch');
+    document.getElementById('modeTimer').classList.toggle('active',mode==='timer');
+    document.getElementById('modePomodoro').classList.toggle('active',mode==='pomodoro');
+    document.getElementById('countdownRow').style.display=mode==='timer'?'flex':'none';
+    document.getElementById('pomodoroRow').style.display=mode==='pomodoro'?'flex':'none';
+    resetTimer();
+}
 function toggleTimer(){ running?stopTimer():startTimer(); }
 
+// ── Pomodoro state ──
+var pomPhase='work'; // 'work' or 'break'
+var pomCyclesDone=0;
+var pomTotalCycles=4;
+var pomWorkMs=0;
+var pomBreakMs=0;
+var pomPhaseStartTime=0;
+
+function pomUpdateStatus(){
+    var el=document.getElementById('pomStatus');
+    if(!el)return;
+    var phaseLabel=pomPhase==='work'?'Work':'Break';
+    el.textContent=phaseLabel+' — Cycle '+(pomCyclesDone+1)+' of '+pomTotalCycles;
+    el.style.color=pomPhase==='work'?'var(--accent)':'#888';
+}
+
+// ── Notifications ──
+function requestNotifPerms(){
+    if('Notification' in window && Notification.permission==='default'){
+        Notification.requestPermission();
+    }
+}
+function sendNotif(title, body){
+    // Browser notification
+    if('Notification' in window && Notification.permission==='granted'){
+        new Notification(title,{body:body,icon:'icon-192.png',silent:false});
+    }
+    // In-app notify
+    notify(title+': '+body);
+    // Audio beep
+    try{
+        var ctx=new(window.AudioContext||window.webkitAudioContext)();
+        var osc=ctx.createOscillator();
+        var gain=ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value=880; osc.type='sine';
+        gain.gain.setValueAtTime(0.4,ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.6);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime+0.6);
+    }catch(e){}
+}
+
+function checkCatSwitch(){
+    var auto=getAutoCat();
+    if(!running && auto!==currentCat){
+        currentCat=auto;
+        renderCatBtns();
+        applyTheme(auto);
+        var cat=CATS.find(function(c){return c.id===auto;});
+        if(cat) sendNotif('Category switched','Now in '+cat.label);
+    }
+}
+
 function startTimer(){
-    if(currentMode==='timer'){ var h=parseInt(document.getElementById('cdH').value)||0; var m=parseInt(document.getElementById('cdM').value)||0; countdownTotal=(h*60+m)*60000; if(countdownTotal<=0){notify('Set a duration first');return;} }
-    running=true; startTime=Date.now()-elapsedMs; sessionStart=new Date(); interval=setInterval(tick,100);
+    requestNotifPerms();
+    if(currentMode==='timer'){
+        var h=parseInt(document.getElementById('cdH').value)||0;
+        var m=parseInt(document.getElementById('cdM').value)||0;
+        countdownTotal=(h*60+m)*60000;
+        if(countdownTotal<=0){notify('Set a duration first');return;}
+    }
+    if(currentMode==='pomodoro'){
+        pomWorkMs=(parseInt(document.getElementById('pomWork').value)||25)*60000;
+        pomBreakMs=(parseInt(document.getElementById('pomBreak').value)||5)*60000;
+        pomTotalCycles=parseInt(document.getElementById('pomCycles').value)||4;
+        pomCyclesDone=0; pomPhase='work';
+        countdownTotal=pomWorkMs;
+        pomUpdateStatus();
+    }
+    running=true; startTime=Date.now()-elapsedMs; sessionStart=new Date();
+    pomPhaseStartTime=Date.now();
+    interval=setInterval(tick,100);
     document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop';
     document.getElementById('startStopBtn').style.background='var(--red)';
     document.getElementById('timerDisplay').classList.add('running');
@@ -888,20 +989,96 @@ function startTimer(){
 
 function stopTimer(){
     if(!running)return; running=false; clearInterval(interval);
-    var mins=Math.round((Date.now()-startTime)/60000);
-    if(mins>0) recordSession(currentCat,mins);
+    if(currentMode==='pomodoro'){
+        // Only record work time spent so far in this phase
+        if(pomPhase==='work'){
+            var worked=Math.round((Date.now()-pomPhaseStartTime)/60000);
+            if(worked>0) recordSession(currentCat,worked);
+        }
+        elapsedMs=0;
+        document.getElementById('timerDisplay').textContent='00:00:00';
+        document.getElementById('pomStatus').textContent='';
+    } else {
+        var mins=Math.round((Date.now()-startTime)/60000);
+        if(mins>0) recordSession(currentCat,mins);
+        elapsedMs=0;
+        document.getElementById('timerDisplay').textContent='00:00:00';
+    }
     document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
     document.getElementById('startStopBtn').style.background='var(--accent)';
-    document.getElementById('timerDisplay').classList.remove('running'); elapsedMs=0; document.getElementById('timerDisplay').textContent='00:00:00';
+    document.getElementById('timerDisplay').classList.remove('running');
 }
 
-function resetTimer(){ if(running){clearInterval(interval);running=false;} elapsedMs=0; startTime=null; document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start'; document.getElementById('startStopBtn').style.background='var(--accent)'; document.getElementById('timerDisplay').textContent='00:00:00'; document.getElementById('timerDisplay').classList.remove('running'); }
+function resetTimer(){
+    if(running){clearInterval(interval);running=false;}
+    elapsedMs=0; startTime=null; pomPhase='work'; pomCyclesDone=0;
+    document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
+    document.getElementById('startStopBtn').style.background='var(--accent)';
+    document.getElementById('timerDisplay').textContent='00:00:00';
+    document.getElementById('timerDisplay').classList.remove('running');
+    var ps=document.getElementById('pomStatus'); if(ps) ps.textContent='';
+}
 
 function tick(){
     var ms;
-    if(currentMode==='stopwatch'){ ms=Date.now()-startTime; }
-    else{ ms=countdownTotal-(Date.now()-startTime); if(ms<=0){ document.getElementById('timerDisplay').textContent='00:00:00'; var el=countdownTotal; running=false; clearInterval(interval); var mins=Math.round(el/60000); if(mins>0)recordSession(currentCat,mins); document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start'; document.getElementById('startStopBtn').style.background='var(--accent)'; document.getElementById('timerDisplay').classList.remove('running'); elapsedMs=0; notify('Timer complete! Session saved.'); return; } }
-    elapsedMs=ms; document.getElementById('timerDisplay').textContent=formatMs(ms);
+    if(currentMode==='stopwatch'){
+        ms=Date.now()-startTime;
+        elapsedMs=ms;
+        document.getElementById('timerDisplay').textContent=formatMs(ms);
+        return;
+    }
+    // Timer and Pomodoro both count down
+    ms=countdownTotal-(Date.now()-startTime);
+    if(ms<=0){
+        if(currentMode==='timer'){
+            document.getElementById('timerDisplay').textContent='00:00:00';
+            var el=countdownTotal; running=false; clearInterval(interval);
+            var mins=Math.round(el/60000);
+            if(mins>0) recordSession(currentCat,mins);
+            document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
+            document.getElementById('startStopBtn').style.background='var(--accent)';
+            document.getElementById('timerDisplay').classList.remove('running');
+            elapsedMs=0;
+            sendNotif('Timer complete','Session saved.');
+            return;
+        }
+        if(currentMode==='pomodoro'){
+            if(pomPhase==='work'){
+                // Record work session
+                var workedMins=Math.round(pomWorkMs/60000);
+                if(workedMins>0) recordSession(currentCat,workedMins);
+                pomCyclesDone++;
+                if(pomCyclesDone>=pomTotalCycles){
+                    // All cycles done
+                    running=false; clearInterval(interval);
+                    document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
+                    document.getElementById('startStopBtn').style.background='var(--accent)';
+                    document.getElementById('timerDisplay').classList.remove('running');
+                    document.getElementById('timerDisplay').textContent='00:00:00';
+                    document.getElementById('pomStatus').textContent='All '+pomTotalCycles+' cycles complete!';
+                    elapsedMs=0;
+                    sendNotif('Pomodoro complete','All '+pomTotalCycles+' cycles done. Great work!');
+                    return;
+                }
+                // Switch to break
+                pomPhase='break';
+                countdownTotal=pomBreakMs;
+                startTime=Date.now(); elapsedMs=0; pomPhaseStartTime=Date.now();
+                pomUpdateStatus();
+                sendNotif('Break time','Work session done. Take a '+(pomBreakMs/60000)+' min break.');
+            } else {
+                // Break done, switch to work
+                pomPhase='work';
+                countdownTotal=pomWorkMs;
+                startTime=Date.now(); elapsedMs=0; pomPhaseStartTime=Date.now();
+                pomUpdateStatus();
+                sendNotif('Back to work','Break over. Cycle '+(pomCyclesDone+1)+' of '+pomTotalCycles+'.');
+            }
+            return;
+        }
+    }
+    elapsedMs=ms;
+    document.getElementById('timerDisplay').textContent=formatMs(ms);
 }
 
 function recordSession(catId,mins){
@@ -1154,7 +1331,7 @@ function init(){
     loadDB(); updateHeaderClock(); setInterval(updateHeaderClock,1000);
     loadAims(); renderCatBtns(); applyTheme(currentCat); renderProgress(); updateStreak(); buildDaySelector();
     CATS.forEach(function(c){ var el=document.getElementById('aim-'+c.id); if(el)el.addEventListener('input',function(){ updateAimHint(c.id); }); });
-    setInterval(function(){ if(!running){var auto=getAutoCat();if(auto!==currentCat){currentCat=auto;renderCatBtns();applyTheme(auto);}} },60000);
+    setInterval(function(){ if(!running){ var auto=getAutoCat(); if(auto!==currentCat){ currentCat=auto; renderCatBtns(); applyTheme(auto); var cat=CATS.find(function(c){return c.id===auto;}); if(cat) sendNotif('Category switched','Now in '+cat.label); } } },60000);
 }
 init();
 </script>
