@@ -815,6 +815,16 @@ window._fireSave = function(dbData) {
     }, 2000);
 };
 
+// Save activity log to Firestore
+window._fireLogSave = function(logData) {
+    if (!currentUser) return;
+    try {
+        setDoc(doc(db_fire, 'logs', currentUser.uid), logData);
+    } catch(e) {
+        console.warn('Firestore log save failed:', e);
+    }
+};
+
 onAuthStateChanged(auth, function(user) {
     currentUser = user;
     if (user) {
@@ -831,6 +841,26 @@ onAuthStateChanged(auth, function(user) {
         document.getElementById('accountName').textContent = user.displayName || 'Signed in';
         document.getElementById('accountEmail').textContent = user.email;
         document.getElementById('accountSyncStatus').textContent = 'Syncing...';
+
+        // Listen for log changes from Firestore
+        onSnapshot(doc(db_fire, 'logs', user.uid), function(snap) {
+            if (snap.exists()) {
+                var cloudLog = snap.data();
+                var today = getTodayKey();
+                if (cloudLog.date === today) {
+                    // Merge: union of local and cloud entries by timestamp
+                    var localTs = new Set(activityLog.map(function(e){ return e.ts; }));
+                    var merged = activityLog.slice();
+                    (cloudLog.entries || []).forEach(function(e) {
+                        if (!localTs.has(e.ts)) merged.push(e);
+                    });
+                    merged.sort(function(a,b){ return a.ts - b.ts; });
+                    activityLog = merged;
+                    localStorage.setItem(LOG_KEY, JSON.stringify({date: today, entries: activityLog}));
+                    renderActivityLog();
+                }
+            }
+        });
 
         // Listen for changes from Firestore and merge into local db
         if (firestoreUnsub) firestoreUnsub();
@@ -1309,12 +1339,47 @@ function importJSON(event) {
 }
 
 /* ── ACTIVITY LOG ── */
+var LOG_KEY = 'studyLog_v1';
 var activityLog = [];
+var activityLogDate = getTodayKey();
+
+function loadActivityLog() {
+    try {
+        var raw = JSON.parse(localStorage.getItem(LOG_KEY) || '{}');
+        var today = getTodayKey();
+        if (raw.date === today) {
+            activityLog = raw.entries || [];
+        } else {
+            // New day — clear old log
+            activityLog = [];
+            saveActivityLog();
+        }
+        activityLogDate = today;
+    } catch(e) { activityLog = []; }
+}
+
+function saveActivityLog() {
+    var today = getTodayKey();
+    localStorage.setItem(LOG_KEY, JSON.stringify({date: today, entries: activityLog}));
+    // Sync to Firestore
+    if (window._fireLogSave) window._fireLogSave({date: today, entries: activityLog});
+}
+
+function checkMidnightLogReset() {
+    var today = getTodayKey();
+    if (today !== activityLogDate) {
+        activityLog = [];
+        activityLogDate = today;
+        saveActivityLog();
+        renderActivityLog();
+    }
+}
 
 function addLogEntry(type, msg) {
     var now = new Date();
     var time = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    activityLog.push({time: time, type: type, msg: msg});
+    activityLog.push({time: time, type: type, msg: msg, ts: Date.now()});
+    saveActivityLog();
     renderActivityLog();
 }
 
@@ -1337,6 +1402,7 @@ function renderActivityLog() {
 
 function clearActivityLog() {
     activityLog = [];
+    saveActivityLog();
     renderActivityLog();
 }
 
@@ -1427,28 +1493,26 @@ function getPipCatInfo() {
 }
 
 function buildPipHTML(cat, timeStr) {
-    var btnBg = running ? '#e05252' : cat.color;
+    var isBreak = currentMode === 'pomodoro' && pomPhase === 'break';
+    var accentColor = isBreak ? '#666666' : cat.color;
+    var btnBg = running ? '#e05252' : accentColor;
     var btnLabel = running ? '⏸ Stop' : '▶ Start';
+    var phaseLabel = currentMode === 'pomodoro'
+        ? (pomPhase === 'work' ? 'WORK — Cycle ' + (pomCyclesDone + 1) + '/' + pomTotalCycles : 'BREAK — Cycle ' + pomCyclesDone + '/' + pomTotalCycles)
+        : cat.label;
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
         '@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@500;600&display=swap");' +
         '*{margin:0;padding:0;box-sizing:border-box;}' +
         'html,body{width:100%;height:100%;background:#0a0a0a;display:flex;align-items:center;justify-content:center;overflow:hidden;}' +
-        '.pip-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px;}' +
-        '.pip-cat{font-family:"DM Sans",sans-serif;font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:' + cat.color + ';opacity:0.9;}' +
-        '.pip-dot{width:6px;height:6px;border-radius:50%;background:' + cat.color + ';display:inline-block;margin-right:6px;vertical-align:middle;}' +
-        '.pip-time{font-family:"JetBrains Mono",monospace;font-size:38px;font-weight:600;color:#f0f0f0;letter-spacing:-2px;line-height:1;}' +
-        '.pip-time.running{color:' + cat.color + ';}' +
-        '.pip-status{font-family:"DM Sans",sans-serif;font-size:10px;color:#404040;font-weight:500;letter-spacing:0.5px;text-transform:uppercase;}' +
-        '.pip-bar{width:80%;height:2px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:2px;}' +
-        '.pip-bar-fill{height:100%;border-radius:2px;background:' + cat.color + ';transition:width 0.5s ease;}' +
-        '.pip-btn{margin-top:4px;padding:7px 24px;border-radius:8px;border:none;font-family:"DM Sans",sans-serif;font-size:12px;font-weight:600;cursor:pointer;letter-spacing:0.3px;transition:opacity 0.15s;}' +
+        '.pip-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;padding:10px 14px;}' +
+        '.pip-cat{font-family:"DM Sans",sans-serif;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:' + accentColor + ';}' +
+        '.pip-time{font-family:"JetBrains Mono",monospace;font-size:36px;font-weight:600;color:' + (running ? accentColor : '#f0f0f0') + ';letter-spacing:-2px;line-height:1;}' +
+        '.pip-btn{padding:5px 20px;border-radius:7px;border:none;font-family:"DM Sans",sans-serif;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:0.3px;}' +
         '.pip-btn:hover{opacity:0.85;}' +
         '</style></head>' +
         '<body><div class="pip-wrap">' +
-        '<div class="pip-cat"><span class="pip-dot"></span>' + cat.label + '</div>' +
-        '<div class="pip-time' + (running ? ' running' : '') + '" id="pip-display">' + timeStr + '</div>' +
-        '<div class="pip-status" id="pip-status">' + (running ? 'running' : 'paused') + '</div>' +
-        '<div class="pip-bar"><div class="pip-bar-fill" id="pip-bar-fill" style="width:' + (running ? '100' : '0') + '%"></div></div>' +
+        '<div class="pip-cat">' + phaseLabel + '</div>' +
+        '<div class="pip-time" id="pip-display">' + timeStr + '</div>' +
         '<button class="pip-btn" id="pip-startstop" style="background:' + btnBg + ';color:#0a0a0a;">' + btnLabel + '</button>' +
         '</div></body></html>';
 }
@@ -1457,22 +1521,23 @@ function updatePipContent() {
     if (!pipWindow || pipWindow.closed) { stopPipInterval(); return; }
     var timeStr = document.getElementById('timerDisplay').textContent;
     var cat = getPipCatInfo();
+    var isBreak = currentMode === 'pomodoro' && pomPhase === 'break';
+    var accentColor = isBreak ? '#666666' : cat.color;
     var display = pipWindow.document.getElementById('pip-display');
-    var status = pipWindow.document.getElementById('pip-status');
-    var barFill = pipWindow.document.getElementById('pip-bar-fill');
     var btn = pipWindow.document.getElementById('pip-startstop');
+    var catEl = pipWindow.document.querySelector('.pip-cat');
     if (!display) return;
     display.textContent = timeStr;
-    display.className = 'pip-time' + (running ? ' running' : '');
-    display.style.color = running ? cat.color : '#f0f0f0';
-    if (status) status.textContent = running ? 'running' : 'paused';
-    if (barFill) {
-        barFill.style.background = cat.color;
-        barFill.style.width = running ? '100%' : '0%';
+    display.style.color = running ? accentColor : '#f0f0f0';
+    if (catEl) {
+        catEl.style.color = accentColor;
+        catEl.textContent = currentMode === 'pomodoro'
+            ? (pomPhase === 'work' ? 'WORK — Cycle ' + (pomCyclesDone + 1) + '/' + pomTotalCycles : 'BREAK — Cycle ' + pomCyclesDone + '/' + pomTotalCycles)
+            : cat.label;
     }
     if (btn) {
         btn.textContent = running ? '⏸ Stop' : '▶ Start';
-        btn.style.background = running ? '#e05252' : cat.color;
+        btn.style.background = running ? '#e05252' : accentColor;
     }
 }
 
@@ -1585,8 +1650,12 @@ document.addEventListener('visibilitychange', function() {
 function init(){
     loadDB(); updateHeaderClock(); setInterval(updateHeaderClock,1000);
     loadAims(); renderCatBtns(); applyTheme(currentCat); renderProgress(); updateStreak(); buildDaySelector();
+    loadActivityLog(); renderActivityLog();
     CATS.forEach(function(c){ var el=document.getElementById('aim-'+c.id); if(el)el.addEventListener('input',function(){ updateAimHint(c.id); }); });
-    setInterval(function(){ if(!running){ var auto=getAutoCat(); if(auto!==currentCat){ currentCat=auto; renderCatBtns(); applyTheme(auto); var cat=CATS.find(function(c){return c.id===auto;}); if(cat) sendNotif('Category switched','Now in '+cat.label); addLogEntry('notif','Auto-switched to '+(cat?cat.label:auto)); } } },60000);
+    setInterval(function(){
+        if(!running){ var auto=getAutoCat(); if(auto!==currentCat){ currentCat=auto; renderCatBtns(); applyTheme(auto); var cat=CATS.find(function(c){return c.id===auto;}); if(cat) sendNotif('Category switched','Now in '+cat.label); addLogEntry('notif','Auto-switched to '+(cat?cat.label:auto)); } }
+        checkMidnightLogReset();
+    },60000);
     // Request notification permission early so timer-complete notifs work
     if('Notification' in window && Notification.permission === 'default'){
         Notification.requestPermission();
