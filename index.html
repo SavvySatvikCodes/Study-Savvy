@@ -491,17 +491,17 @@
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;">
                         <div style="display:flex;align-items:center;gap:4px;">
                             <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Work</span>
-                            <input type="number" class="countdown-input" id="pomWork" min="1" max="120" value="25">
+                            <input type="number" class="countdown-input" id="pomWork" min="1" max="120" value="50">
                             <span class="countdown-sep">m</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:4px;">
                             <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Break</span>
-                            <input type="number" class="countdown-input" id="pomBreak" min="1" max="60" value="5">
+                            <input type="number" class="countdown-input" id="pomBreak" min="1" max="60" value="10">
                             <span class="countdown-sep">m</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:4px;">
                             <span style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Cycles</span>
-                            <input type="number" class="countdown-input" id="pomCycles" min="1" max="20" value="4">
+                            <input type="number" class="countdown-input" id="pomCycles" min="1" max="20" value="3">
                         </div>
                     </div>
                     <div id="pomStatus" style="font-size:11px;color:var(--accent);font-weight:600;text-align:center;letter-spacing:0.5px;min-height:16px;"></div>
@@ -816,10 +816,10 @@ window._fireSave = function(dbData) {
 };
 
 // Save activity log to Firestore
-window._fireLogSave = function(logData) {
+window._fireLogSave = async function(logData) {
     if (!currentUser) return;
     try {
-        setDoc(doc(db_fire, 'logs', currentUser.uid), logData);
+        await setDoc(doc(db_fire, 'logs', currentUser.uid), logData);
     } catch(e) {
         console.warn('Firestore log save failed:', e);
     }
@@ -842,11 +842,17 @@ onAuthStateChanged(auth, function(user) {
         document.getElementById('accountEmail').textContent = user.email;
         document.getElementById('accountSyncStatus').textContent = 'Syncing...';
 
+        // Push any locally accumulated log entries up immediately
+        var today = getTodayKey();
+        if (activityLog.length > 0) {
+            window._fireLogSave({date: today, entries: activityLog});
+        }
+
         // Listen for log changes from Firestore
         onSnapshot(doc(db_fire, 'logs', user.uid), function(snap) {
+            var today = getTodayKey();
             if (snap.exists()) {
                 var cloudLog = snap.data();
-                var today = getTodayKey();
                 if (cloudLog.date === today) {
                     // Merge: union of local and cloud entries by timestamp
                     var localTs = new Set(activityLog.map(function(e){ return e.ts; }));
@@ -858,6 +864,11 @@ onAuthStateChanged(auth, function(user) {
                     activityLog = merged;
                     localStorage.setItem(LOG_KEY, JSON.stringify({date: today, entries: activityLog}));
                     renderActivityLog();
+                }
+            } else {
+                // No cloud log yet — push local up
+                if (activityLog.length > 0 && window._fireLogSave) {
+                    window._fireLogSave({date: today, entries: activityLog});
                 }
             }
         });
