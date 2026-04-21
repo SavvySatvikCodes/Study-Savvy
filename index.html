@@ -644,6 +644,10 @@
         <div class="card export-card">
             <div class="export-title">Summary</div>
             <div class="summary-grid" id="summaryGrid"></div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;">Last updated: <strong style="color:var(--text2);">2026-04-21 — Build 31</strong></span>
+            </div>
         </div>
         <div class="card export-card">
             <div class="export-title">
@@ -788,6 +792,7 @@ const provider = new GoogleAuthProvider();
 
 let currentUser = null;
 let firestoreUnsub = null;
+let logUnsub = null;
 let syncTimeout = null;
 
 // Expose to global scope so non-module scripts can call them
@@ -802,7 +807,7 @@ window._fireSignOut = async function() {
     await signOut(auth);
 };
 
-// Save db to Firestore (debounced 2s)
+// Save study db to Firestore (debounced 2s)
 window._fireSave = function(dbData) {
     if (!currentUser) return;
     clearTimeout(syncTimeout);
@@ -815,7 +820,7 @@ window._fireSave = function(dbData) {
     }, 2000);
 };
 
-// Save activity log to Firestore
+// Save activity log to Firestore immediately
 window._fireLogSave = async function(logData) {
     if (!currentUser) return;
     try {
@@ -825,8 +830,23 @@ window._fireLogSave = async function(logData) {
     }
 };
 
+// Save active session state to Firestore
+window._fireSessionState = async function(state) {
+    if (!currentUser) return;
+    try {
+        await setDoc(doc(db_fire, 'sessions', currentUser.uid), state);
+    } catch(e) {
+        console.warn('Firestore session state save failed:', e);
+    }
+};
+
 onAuthStateChanged(auth, function(user) {
     currentUser = user;
+
+    // Clean up old listeners
+    if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+    if (logUnsub) { logUnsub(); logUnsub = null; }
+
     if (user) {
         // Update header UI
         document.getElementById('authBtn').textContent = 'Sign Out';
@@ -842,45 +862,47 @@ onAuthStateChanged(auth, function(user) {
         document.getElementById('accountEmail').textContent = user.email;
         document.getElementById('accountSyncStatus').textContent = 'Syncing...';
 
-        // Push any locally accumulated log entries up immediately
-        var today = getTodayKey();
-        if (activityLog.length > 0) {
-            window._fireLogSave({date: today, entries: activityLog});
+        // Push any locally accumulated log entries up immediately on sign-in
+        if (window._getActivityLog) {
+            var localLog = window._getActivityLog();
+            if (localLog.entries.length > 0) {
+                window._fireLogSave(localLog);
+            }
         }
 
-        // Listen for log changes from Firestore
-        onSnapshot(doc(db_fire, 'logs', user.uid), function(snap) {
-            var today = getTodayKey();
+        // ── Listen: activity log ──
+        logUnsub = onSnapshot(doc(db_fire, 'logs', user.uid), function(snap) {
+            if (!window._mergeActivityLog) return;
             if (snap.exists()) {
-                var cloudLog = snap.data();
-                if (cloudLog.date === today) {
-                    // Merge: union of local and cloud entries by timestamp
-                    var localTs = new Set(activityLog.map(function(e){ return e.ts; }));
-                    var merged = activityLog.slice();
-                    (cloudLog.entries || []).forEach(function(e) {
-                        if (!localTs.has(e.ts)) merged.push(e);
-                    });
-                    merged.sort(function(a,b){ return a.ts - b.ts; });
-                    activityLog = merged;
-                    localStorage.setItem(LOG_KEY, JSON.stringify({date: today, entries: activityLog}));
-                    renderActivityLog();
-                }
-            } else {
-                // No cloud log yet — push local up
-                if (activityLog.length > 0 && window._fireLogSave) {
-                    window._fireLogSave({date: today, entries: activityLog});
-                }
+                window._mergeActivityLog(snap.data());
             }
         });
 
-        // Listen for changes from Firestore and merge into local db
-        if (firestoreUnsub) firestoreUnsub();
+        // ── Listen: active session on other device ──
+        onSnapshot(doc(db_fire, 'sessions', user.uid), function(snap) {
+            if (!snap.exists()) return;
+            var s = snap.data();
+            var banner = document.getElementById('activeSessionBanner');
+            var bannerText = document.getElementById('activeSessionBannerText');
+            if (!banner || !bannerText) return;
+            // Only show if started recently (within 3 hours) and this device isn't running
+            var age = Date.now() - (s.startedAt || 0);
+            if (s.active && age < 3 * 60 * 60 * 1000 && !window._isRunning()) {
+                var cat = (window._getCats ? window._getCats() : []).find(function(c){ return c.id === s.cat; });
+                var mins = Math.round(age / 60000);
+                bannerText.textContent = 'Session active on another device — ' + (cat ? cat.label : s.cat) + ', started ' + mins + ' min ago.';
+                banner.style.display = 'flex';
+            } else {
+                banner.style.display = 'none';
+            }
+        });
+
+        // ── Listen: study db ──
         firestoreUnsub = onSnapshot(doc(db_fire, 'users', user.uid), function(snap) {
             if (snap.exists()) {
                 try {
                     var cloudData = JSON.parse(snap.data().data || '{}');
                     var local = window._getDB ? window._getDB() : {};
-                    // Smart merge: for each day, take whichever version has more total actual minutes
                     var merged = Object.assign({}, cloudData);
                     Object.keys(local).forEach(function(k) {
                         if (!merged[k]) {
@@ -892,10 +914,7 @@ onAuthStateChanged(auth, function(user) {
                         }
                     });
                     if (window._setDB) window._setDB(merged);
-                    // Push the merged result back up so all devices converge
                     if (window._fireSave) window._fireSave(merged);
-                    // Check if another device has an active session
-                    if (snap.data()._activeSession) checkActiveSessionOnOtherDevice(snap.data());
                     document.getElementById('syncStatus').textContent = 'Synced';
                     document.getElementById('accountSyncStatus').textContent = 'Synced';
                     setTimeout(function(){ document.getElementById('syncStatus').textContent = ''; document.getElementById('syncStatus').style.display='none'; document.getElementById('accountSyncStatus').textContent = 'All data synced'; }, 2000);
@@ -903,7 +922,6 @@ onAuthStateChanged(auth, function(user) {
                     console.warn('Firestore parse error:', e);
                 }
             } else {
-                // No cloud data yet — push local up
                 if (window._getDB) window._fireSave(window._getDB());
                 document.getElementById('syncStatus').textContent = 'Synced';
                 document.getElementById('accountSyncStatus').textContent = 'Synced';
@@ -916,10 +934,10 @@ onAuthStateChanged(auth, function(user) {
         document.getElementById('authBtn').onclick = window._fireSignIn;
         document.getElementById('authUser').style.display = 'none';
         document.getElementById('syncStatus').style.display = 'none';
-        // Update export tab account card
         document.getElementById('accountSignedOut').style.display = 'block';
         document.getElementById('accountSignedIn').style.display = 'none';
-        if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+        var banner = document.getElementById('activeSessionBanner');
+        if (banner) banner.style.display = 'none';
     }
 });
 </script>
@@ -949,6 +967,8 @@ function _setDB(newDb){
 }
 window._getDB = _getDB;
 window._setDB = _setDB;
+window._isRunning = function() { return running; };
+window._getCats = function() { return CATS; };
 function getTodayKey(){ const d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
 function getOrCreate(k){ if(!db[k]) db[k]={aims:{dayStudy:0,eveningStudy:0,career:0},actual:{dayStudy:0,eveningStudy:0,career:0},sessions:[]}; return db[k]; }
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -1098,6 +1118,7 @@ function startTimer(){
     pomPhaseStartTime=Date.now();
     var catObj=CATS.find(function(c){return c.id===currentCat;});
     addLogEntry('session', currentMode.charAt(0).toUpperCase()+currentMode.slice(1)+' started — '+(catObj?catObj.label:currentCat));
+    if (window._fireSessionState) window._fireSessionState({active:true, cat:currentCat, startedAt:Date.now()});
     interval=setInterval(tick,100);
     document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop';
     document.getElementById('startStopBtn').style.background='var(--red)';
@@ -1106,6 +1127,7 @@ function startTimer(){
 
 function stopTimer(){
     if(!running)return; running=false; clearInterval(interval);
+    if (window._fireSessionState) window._fireSessionState({active:false, cat:currentCat, startedAt:0});
     if(currentMode==='pomodoro'){
         // Only record work time spent so far in this phase
         if(pomPhase==='work'){
@@ -1424,6 +1446,24 @@ function addManualLogNote() {
     addLogEntry('note', val);
     input.value = '';
 }
+
+// Bridges for Firebase module
+window._getActivityLog = function() {
+    return { date: getTodayKey(), entries: activityLog };
+};
+window._mergeActivityLog = function(cloudLog) {
+    var today = getTodayKey();
+    if (cloudLog.date !== today) return;
+    var localTs = new Set(activityLog.map(function(e){ return e.ts; }));
+    var merged = activityLog.slice();
+    (cloudLog.entries || []).forEach(function(e) {
+        if (!localTs.has(e.ts)) merged.push(e);
+    });
+    merged.sort(function(a,b){ return a.ts - b.ts; });
+    activityLog = merged;
+    localStorage.setItem(LOG_KEY, JSON.stringify({date: today, entries: activityLog}));
+    renderActivityLog();
+};
 
 /* ── MANUAL SESSION ── */
 function applyManualSession() {
