@@ -511,6 +511,9 @@
                     <button class="btn btn-accent" id="startStopBtn" onclick="toggleTimer()">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start
                     </button>
+                    <button class="btn btn-ghost" id="pauseBtn" onclick="pauseTimer()" style="display:none;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause
+                    </button>
                     <button class="btn btn-ghost" onclick="resetTimer()">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Reset
                     </button>
@@ -522,41 +525,8 @@
                     <span id="aimTitle">Today's Aims</span>
                 </div>
                 <div id="aimBody">
-                    <div class="aim-stack">
-                        <div>
-                            <div class="aim-row">
-                                <div class="aim-dot" style="background:var(--cat-day);"></div>
-                                <div class="aim-row-label">Day Study<span>9AM - 6PM</span></div>
-                                <div class="input-wrap" style="flex:1;">
-                                    <input type="number" step="0.1" min="0" class="input" id="aim-dayStudy" placeholder="0" style="padding-right:40px;">
-                                    <span class="input-suffix">hrs</span>
-                                </div>
-                            </div>
-                            <div class="input-hint" id="aimHint-dayStudy" style="padding-left:18px;margin-top:2px;"></div>
-                        </div>
-                        <div>
-                            <div class="aim-row">
-                                <div class="aim-dot" style="background:var(--cat-evening);"></div>
-                                <div class="aim-row-label">Evening Study<span>6PM - 12AM</span></div>
-                                <div class="input-wrap" style="flex:1;">
-                                    <input type="number" step="0.1" min="0" class="input" id="aim-eveningStudy" placeholder="0" style="padding-right:40px;">
-                                    <span class="input-suffix">hrs</span>
-                                </div>
-                            </div>
-                            <div class="input-hint" id="aimHint-eveningStudy" style="padding-left:18px;margin-top:2px;"></div>
-                        </div>
-                        <div>
-                            <div class="aim-row">
-                                <div class="aim-dot" style="background:var(--cat-career);"></div>
-                                <div class="aim-row-label">Career Work<span>Anytime</span></div>
-                                <div class="input-wrap" style="flex:1;">
-                                    <input type="number" step="0.1" min="0" class="input" id="aim-career" placeholder="0" style="padding-right:40px;">
-                                    <span class="input-suffix">hrs</span>
-                                </div>
-                            </div>
-                            <div class="input-hint" id="aimHint-career" style="padding-left:18px;margin-top:2px;"></div>
-                        </div>
-                    </div>
+                    <!-- Aim rows are now generated dynamically by renderAimRows() so they match whatever categories exist -->
+                    <div class="aim-stack" id="aimStack"></div>
                     <div style="display:flex;justify-content:flex-end;margin-top:6px;">
                         <button class="btn btn-accent btn-sm" onclick="saveAims()">Save Aims</button>
                     </div>
@@ -646,7 +616,7 @@
             <div class="summary-grid" id="summaryGrid"></div>
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;">Last updated: <strong style="color:var(--text2);">2026-04-21 — Build 31</strong></span>
+                <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;">Last updated: <strong style="color:var(--text2);">2026-07-07 — Build 34</strong></span>
             </div>
         </div>
         <div class="card export-card">
@@ -663,6 +633,19 @@
             </div>
             <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importJSON(event)">
             <div id="importStatus" style="margin-top:10px;font-size:11px;color:var(--text3);"></div>
+        </div>
+        <!-- Manage Categories: add/rename/recolor/delete categories and set their auto-switch schedule -->
+        <div class="card export-card">
+            <div class="export-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Manage Categories
+            </div>
+            <div class="export-desc">Add or remove categories, rename them, change their colour, and set which days/times each one should auto-switch to (or leave it as "Anytime" for manual-only categories). Edits to names, colours, and schedules need Save Categories to apply.</div>
+            <div id="catManageList" style="display:flex;flex-direction:column;gap:10px;"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                <button class="btn btn-accent btn-sm" onclick="saveCategoryEdits()">Save Categories</button>
+                <button class="btn btn-ghost btn-sm" onclick="addCategory()">+ Add Category</button>
+            </div>
         </div>
         <div class="danger-zone">
             <div class="danger-title">Danger Zone</div>
@@ -686,11 +669,8 @@
                     </div>
                     <div style="flex:1;min-width:120px;">
                         <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Category</div>
-                        <select id="manualCat" class="input" style="font-size:12px;cursor:pointer;">
-                            <option value="dayStudy">Day Study</option>
-                            <option value="eveningStudy">Evening Study</option>
-                            <option value="career">Career Work</option>
-                        </select>
+                        <!-- Options are populated dynamically by populateManualCatSelect() so this always matches current categories -->
+                        <select id="manualCat" class="input" style="font-size:12px;cursor:pointer;"></select>
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -739,7 +719,20 @@
 // ── SERVICE WORKER ──
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-        navigator.serviceWorker.register('sw.js').catch(function(err) {
+        navigator.serviceWorker.register('sw.js').then(function(reg) {
+            // Force check for SW update on every load — no waiting 24hrs
+            reg.update();
+            // When a new SW is found and activated, reload all clients automatically
+            reg.addEventListener('updatefound', function() {
+                var newWorker = reg.installing;
+                newWorker.addEventListener('statechange', function() {
+                    if (newWorker.state === 'activated') {
+                        // New SW took over — reload to get fresh files
+                        window.location.reload();
+                    }
+                });
+            });
+        }).catch(function(err) {
             console.warn('SW registration failed:', err);
         });
     });
@@ -943,11 +936,64 @@ onAuthStateChanged(auth, function(user) {
 </script>
 
 <script>
-const CATS = [
+/* ── DYNAMIC CATEGORY SYSTEM ──
+   Categories used to be a fixed set of 3 (dayStudy/eveningStudy/career) with only
+   the label editable. This has been replaced with fully editable categories: you can
+   add/delete categories, recolor them, rename them, and give each one its own
+   auto-switch schedule per day of the week (or mark it "Anytime" for manual-only). */
+const CATS_DEFAULT = [
     { id: 'dayStudy',     label: 'Day Study',     hours: '9AM-6PM',  color: '#00c49a', activeClass: 'active-day' },
     { id: 'eveningStudy', label: 'Evening Study',  hours: '6PM-12AM', color: '#d63384', activeClass: 'active-evening' },
     { id: 'career',       label: 'Career Work',    hours: 'Anytime',  color: '#d4a017', activeClass: 'active-career' }
 ];
+const CAT_LABELS_KEY = 'studyCatLabels_v1'; // old label-only storage, kept for migration
+const CATEGORIES_KEY = 'studyCategories_v2'; // new full category storage (label, color, schedule)
+
+function buildSchedule(start, end, enabledDays) {
+    var sch = {};
+    for (var d = 0; d < 7; d++) {
+        sch[d] = { enabled: enabledDays.indexOf(d) >= 0, start: start, end: end };
+    }
+    return sch;
+}
+
+function defaultCategories() {
+    return [
+        { id: 'dayStudy',     label: 'Day Study',     color: '#00c49a', anytime: false, schedule: buildSchedule('09:00','18:00',[0,1,2,3,4,5,6]) },
+        { id: 'eveningStudy', label: 'Evening Study', color: '#d63384', anytime: false, schedule: buildSchedule('18:00','23:59',[0,1,2,3,4,5,6]) },
+        { id: 'career',       label: 'Career Work',   color: '#d4a017', anytime: true,  schedule: buildSchedule('09:00','18:00',[]) }
+    ];
+}
+
+function loadCategories() {
+    try {
+        var saved = JSON.parse(localStorage.getItem(CATEGORIES_KEY));
+        if (saved && Array.isArray(saved) && saved.length) {
+            // Backfill in case a category is missing fields from an older save
+            saved.forEach(function(c) {
+                if (!c.schedule) c.schedule = buildSchedule('09:00','18:00',[]);
+                for (var d = 0; d < 7; d++) { if (!c.schedule[d]) c.schedule[d] = { enabled:false, start:'09:00', end:'18:00' }; }
+                if (typeof c.anytime !== 'boolean') c.anytime = false;
+                if (!c.color) c.color = '#00c49a';
+            });
+            return saved;
+        }
+    } catch(e) {}
+    // Migrate from the old label-only key if present, otherwise use defaults
+    var cats = defaultCategories();
+    try {
+        var oldLabels = JSON.parse(localStorage.getItem(CAT_LABELS_KEY) || '{}');
+        cats.forEach(function(c) { if (oldLabels[c.id]) c.label = oldLabels[c.id]; });
+    } catch(e) {}
+    return cats;
+}
+
+function saveCategories() {
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(CATS));
+    if (window._fireSave) window._fireSave(db);
+}
+
+const CATS = loadCategories();
 const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const DB_KEY = 'studyTracker_v3';
 let db = {}, currentMode = 'stopwatch', currentCat = getAutoCat(), running = false,
@@ -970,13 +1016,64 @@ window._setDB = _setDB;
 window._isRunning = function() { return running; };
 window._getCats = function() { return CATS; };
 function getTodayKey(){ const d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
-function getOrCreate(k){ if(!db[k]) db[k]={aims:{dayStudy:0,eveningStudy:0,career:0},actual:{dayStudy:0,eveningStudy:0,career:0},sessions:[]}; return db[k]; }
+function getOrCreate(k){
+    if(!db[k]){
+        var aims={}, actual={};
+        CATS.forEach(function(c){ aims[c.id]=0; actual[c.id]=0; });
+        db[k]={aims:aims,actual:actual,sessions:[]};
+    }
+    return db[k];
+}
 function pad2(n){ return String(n).padStart(2,'0'); }
 function formatMs(ms){ if(ms<0)ms=0; var t=Math.floor(ms/1000); return pad2(Math.floor(t/3600))+':'+pad2(Math.floor((t%3600)/60))+':'+pad2(t%60); }
 function minsToHours(m){ if(!m)return'0h'; var h=Math.floor(m/60),r=Math.round(m%60); if(h===0)return r+'m'; if(r===0)return h+'h'; return h+'h '+r+'m'; }
 function minsToDecimal(m){ return (m/60).toFixed(1); }
 function hoursToMins(v){ var n=parseFloat(v); return(isNaN(n)||n<0)?0:Math.round(n*60); }
-function getAutoCat(){ var h=new Date().getHours(); if(h>=9&&h<18)return'dayStudy'; if(h>=18)return'eveningStudy'; return'career'; }
+function timeToMins(hhmm){ var p=hhmm.split(':'); return (parseInt(p[0],10)||0)*60+(parseInt(p[1],10)||0); }
+function getAutoCat(){
+    var now=new Date(); var day=now.getDay(); var mins=now.getHours()*60+now.getMinutes();
+    for(var i=0;i<CATS.length;i++){
+        var c=CATS[i];
+        if(c.anytime) continue;
+        var sch=c.schedule && c.schedule[day];
+        if(!sch || !sch.enabled) continue;
+        var s=timeToMins(sch.start), e=timeToMins(sch.end);
+        if(s<=e){ if(mins>=s&&mins<=e) return c.id; }
+        else { if(mins>=s||mins<=e) return c.id; } // overnight range (e.g. 22:00 to 06:00)
+    }
+    var anytimeCat=CATS.find(function(c){ return c.anytime; });
+    if(anytimeCat) return anytimeCat.id;
+    return CATS[0] ? CATS[0].id : null;
+}
+function catScheduleLabel(cat){
+    if(cat.anytime) return 'Anytime';
+    var enabledDays=[]; for(var d=0;d<7;d++){ if(cat.schedule[d]&&cat.schedule[d].enabled) enabledDays.push(d); }
+    if(enabledDays.length===0) return 'Manual only';
+    var first=cat.schedule[enabledDays[0]];
+    var same=enabledDays.every(function(d){ return cat.schedule[d].start===first.start&&cat.schedule[d].end===first.end; });
+    var range=fmtTimeShort(first.start)+'-'+fmtTimeShort(first.end);
+    if(same&&enabledDays.length===7) return range;
+    if(same) return range+' ('+enabledDays.length+'d)';
+    return 'Varies by day';
+}
+function fmtTimeShort(hhmm){
+    var p=hhmm.split(':'); var h=parseInt(p[0],10), m=parseInt(p[1],10);
+    var ap=h>=12?'PM':'AM'; var h12=h%12; if(h12===0)h12=12;
+    return h12+(m>0?':'+pad2(m):'')+ap;
+}
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function contrastColor(hex){
+    var c=(hex||'#00c49a').replace('#',''); if(c.length===3) c=c.split('').map(function(x){return x+x;}).join('');
+    var r=parseInt(c.substr(0,2),16)||0, g=parseInt(c.substr(2,2),16)||0, b=parseInt(c.substr(4,2),16)||0;
+    var yiq=(r*299+g*587+b*114)/1000;
+    return yiq>=140?'#0a0a0a':'#ffffff';
+}
+function lighten(hex, amt){
+    var c=(hex||'#00c49a').replace('#',''); if(c.length===3) c=c.split('').map(function(x){return x+x;}).join('');
+    var r=parseInt(c.substr(0,2),16)||0, g=parseInt(c.substr(2,2),16)||0, b=parseInt(c.substr(4,2),16)||0;
+    r=Math.min(255,r+amt); g=Math.min(255,g+amt); b=Math.min(255,b+amt);
+    return '#'+[r,g,b].map(function(x){ return Math.round(x).toString(16).padStart(2,'0'); }).join('');
+}
 function notify(msg){ var el=document.getElementById('notification'); el.textContent=msg; el.classList.add('show'); setTimeout(function(){ el.classList.remove('show'); },2500); }
 
 var CAT_THEMES={
@@ -985,10 +1082,11 @@ var CAT_THEMES={
     career:      {accent:'#d4a017',accent2:'#e8b828',accentText:'#d4a017'}
 };
 function applyTheme(id){
-    var t=CAT_THEMES[id]||CAT_THEMES.dayStudy;
-    document.documentElement.style.setProperty('--accent',t.accent);
-    document.documentElement.style.setProperty('--accent2',t.accent2);
-    document.documentElement.style.setProperty('--accent-text',t.accentText);
+    var cat=CATS.find(function(c){ return c.id===id; })||CATS[0];
+    if(!cat) return;
+    document.documentElement.style.setProperty('--accent',cat.color);
+    document.documentElement.style.setProperty('--accent2',lighten(cat.color,30));
+    document.documentElement.style.setProperty('--accent-text',cat.color);
 }
 
 function switchTab(id){
@@ -1022,8 +1120,14 @@ function renderCatBtns(){
     var container=document.getElementById('catSelector'); var auto=getAutoCat(); container.innerHTML='';
     CATS.forEach(function(cat){
         var btn=document.createElement('button');
-        btn.className='cat-btn'+(currentCat===cat.id?' '+cat.activeClass:'');
-        btn.innerHTML=cat.label+(auto===cat.id&&!running?' <span class="auto-tag">AUTO</span>':'');
+        btn.className='cat-btn';
+        var isActive=currentCat===cat.id;
+        if(isActive){
+            btn.style.background=cat.color;
+            btn.style.borderColor=cat.color;
+            btn.style.color=contrastColor(cat.color);
+        }
+        btn.innerHTML=escapeHtml(cat.label)+(auto===cat.id&&!running?' <span class="auto-tag">AUTO</span>':'');
         btn.onclick=function(){ if(running){notify('Stop the timer first');return;} currentCat=cat.id; renderCatBtns(); applyTheme(cat.id); };
         container.appendChild(btn);
     });
@@ -1039,7 +1143,37 @@ function setMode(mode){
     document.getElementById('pomodoroRow').style.display=mode==='pomodoro'?'flex':'none';
     resetTimer();
 }
-function toggleTimer(){ running?stopTimer():startTimer(); }
+var paused = false;
+
+function pauseTimer() {
+    if (!running) return;
+    running = false;
+    paused = true;
+    clearInterval(interval);
+    // elapsedMs already holds the time up to this point
+    document.getElementById('pauseBtn').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Resume';
+    document.getElementById('timerDisplay').classList.remove('running');
+    addLogEntry('notif', 'Timer paused at ' + document.getElementById('timerDisplay').textContent);
+}
+
+function toggleTimer() {
+    if (paused) {
+        // Resume from pause
+        paused = false;
+        running = true;
+        startTime = Date.now() - elapsedMs;
+        if (currentMode === 'timer' || currentMode === 'pomodoro') {
+            startTime = Date.now() - (countdownTotal - elapsedMs);
+        }
+        interval = setInterval(tick, 100);
+        document.getElementById('startStopBtn').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop';
+        document.getElementById('startStopBtn').style.background = 'var(--red)';
+        document.getElementById('pauseBtn').innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause';
+        document.getElementById('timerDisplay').classList.add('running');
+        return;
+    }
+    running ? stopTimer() : startTimer();
+}
 
 // ── Pomodoro state ──
 var pomPhase='work'; // 'work' or 'break'
@@ -1093,6 +1227,7 @@ function checkCatSwitch(){
         applyTheme(auto);
         var cat=CATS.find(function(c){return c.id===auto;});
         if(cat) sendNotif('Category switched','Now in '+cat.label);
+        addLogEntry('notif','Auto-switched to '+(cat?cat.label:auto));
     }
 }
 
@@ -1122,12 +1257,15 @@ function startTimer(){
     interval=setInterval(tick,100);
     document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop';
     document.getElementById('startStopBtn').style.background='var(--red)';
+    document.getElementById('pauseBtn').style.display='flex';
     document.getElementById('timerDisplay').classList.add('running');
 }
 
 function stopTimer(){
-    if(!running)return; running=false; clearInterval(interval);
+    if(!running)return; running=false; paused=false; clearInterval(interval);
     if (window._fireSessionState) window._fireSessionState({active:false, cat:currentCat, startedAt:0});
+    document.getElementById('pauseBtn').style.display='none';
+    document.getElementById('pauseBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause';
     if(currentMode==='pomodoro'){
         // Only record work time spent so far in this phase
         if(pomPhase==='work'){
@@ -1150,7 +1288,9 @@ function stopTimer(){
 
 function resetTimer(){
     if(running){clearInterval(interval);running=false;}
-    elapsedMs=0; startTime=null; pomPhase='work'; pomCyclesDone=0;
+    paused=false; elapsedMs=0; startTime=null; pomPhase='work'; pomCyclesDone=0;
+    document.getElementById('pauseBtn').style.display='none';
+    document.getElementById('pauseBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause';
     document.getElementById('startStopBtn').innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
     document.getElementById('startStopBtn').style.background='var(--accent)';
     document.getElementById('timerDisplay').textContent='00:00:00';
@@ -1243,7 +1383,7 @@ function renderProgress(){
         var aim=(day.aims&&day.aims[cat.id])||0; var actual=(day.actual&&day.actual[cat.id])||0;
         var pct=aim>0?Math.min((actual/aim)*100,100):(actual>0?100:0); var over=aim>0&&actual>aim;
         var card=document.createElement('div'); card.className='card progress-card';
-        card.innerHTML='<div class="progress-top"><div class="progress-cat"><div class="progress-dot" style="background:'+cat.color+'"></div>'+cat.label+'<span class="progress-hours-badge">'+cat.hours+'</span></div><div class="progress-stats"><strong>'+minsToHours(actual)+'</strong> / '+(aim>0?minsToHours(aim):'no aim')+(over?'<span class="over-tag" style="color:'+cat.color+'">+'+minsToHours(actual-aim)+'</span>':'')+'</div></div><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+cat.color+'"></div></div>';
+        card.innerHTML='<div class="progress-top"><div class="progress-cat"><div class="progress-dot" style="background:'+cat.color+'"></div>'+escapeHtml(cat.label)+'<span class="progress-hours-badge">'+catScheduleLabel(cat)+'</span></div><div class="progress-stats"><strong>'+minsToHours(actual)+'</strong> / '+(aim>0?minsToHours(aim):'no aim')+(over?'<span class="over-tag" style="color:'+cat.color+'">+'+minsToHours(actual-aim)+'</span>':'')+'</div></div><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+cat.color+'"></div></div>';
         container.appendChild(card);
     });
 }
@@ -1282,13 +1422,12 @@ function renderCompare(){
     var entries=Object.keys(db).filter(function(k){ return new Date(k+'T12:00:00').getDay()===compareDay; }).sort();
     if(entries.length===0){container.innerHTML='<div class="empty">No '+WEEKDAYS[compareDay]+' data yet. Keep tracking!</div>';return;}
     Object.keys(charts).forEach(function(k){ if(charts[k])charts[k].destroy(); }); charts={};
-    var avg={dayStudy:0,eveningStudy:0,career:0,total:0},best={date:'',total:0};
+    var avg={total:0}; CATS.forEach(function(c){ avg[c.id]=0; });
+    var best={date:'',total:0};
     entries.forEach(function(k){ var d=db[k]; CATS.forEach(function(c){ avg[c.id]+=(d.actual&&d.actual[c.id])||0; }); var t=CATS.reduce(function(s,c){ return s+((d.actual&&d.actual[c.id])||0); },0); avg.total+=t; if(t>best.total){best.total=t;best.date=k;} });
     var n=entries.length; CATS.forEach(function(c){ avg[c.id]/=n; }); avg.total/=n;
     var labels=entries.map(function(k){ var d=new Date(k+'T12:00:00'); return (d.getMonth()+1)+'/'+d.getDate(); });
-    var dataDay=entries.map(function(k){ return(db[k].actual&&db[k].actual.dayStudy)||0; });
-    var dataEve=entries.map(function(k){ return(db[k].actual&&db[k].actual.eveningStudy)||0; });
-    var dataCar=entries.map(function(k){ return(db[k].actual&&db[k].actual.career)||0; });
+    var dataByCat=CATS.map(function(c){ return entries.map(function(k){ return (db[k].actual&&db[k].actual[c.id])||0; }); });
     var dataTotal=entries.map(function(k){ return CATS.reduce(function(s,c){ return s+((db[k].actual&&db[k].actual[c.id])||0); },0); });
     var dataTotalAim=entries.map(function(k){ return CATS.reduce(function(s,c){ return s+((db[k].aims&&db[k].aims[c.id])||0); },0); });
 
@@ -1308,9 +1447,10 @@ function renderCompare(){
     Chart.defaults.color='#555'; Chart.defaults.borderColor='rgba(255,255,255,0.07)'; Chart.defaults.font.family="'DM Sans', sans-serif"; Chart.defaults.font.size=11;
     var tt={backgroundColor:'rgba(15,15,15,0.95)',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#f0f0f0',bodyColor:'#888',cornerRadius:6,padding:9,callbacks:{label:function(ctx){ return ctx.dataset.label+': '+minsToHours(ctx.parsed.y||ctx.parsed||0); }}};
 
-    charts.stacked=new Chart(document.getElementById('chart-stacked'),{type:'bar',data:{labels:labels,datasets:[{label:'Active Circuit',data:dataDay,backgroundColor:'#00c49a',borderRadius:2},{label:'Closed Loop',data:dataEve,backgroundColor:'#d63384',borderRadius:2},{label:'Career Work',data:dataCar,backgroundColor:'#d4a017',borderRadius:{topLeft:4,topRight:4}}]},options:{responsive:true,plugins:{tooltip:tt,legend:{labels:{boxWidth:8,padding:10,color:'#888'}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:{callback:function(v){ return minsToDecimal(v)+'h'; },color:'#555'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
+    var stackedDatasets=CATS.map(function(c,i){ return {label:c.label,data:dataByCat[i],backgroundColor:c.color,borderRadius:(i===CATS.length-1)?{topLeft:4,topRight:4}:2}; });
+    charts.stacked=new Chart(document.getElementById('chart-stacked'),{type:'bar',data:{labels:labels,datasets:stackedDatasets},options:{responsive:true,plugins:{tooltip:tt,legend:{labels:{boxWidth:8,padding:10,color:'#888'}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:{callback:function(v){ return minsToDecimal(v)+'h'; },color:'#555'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
     charts.trend=new Chart(document.getElementById('chart-trend'),{type:'line',data:{labels:labels,datasets:[{label:'Actual',data:dataTotal,borderColor:'#00c49a',backgroundColor:'rgba(0,196,154,0.08)',fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'#00c49a'},{label:'Aim',data:dataTotalAim,borderColor:'rgba(255,255,255,0.2)',borderDash:[4,4],tension:0.3,pointRadius:2,fill:false}]},options:{responsive:true,plugins:{tooltip:tt,legend:{labels:{boxWidth:8,padding:10,color:'#888'}}},scales:{x:{grid:{display:false},ticks:{color:'#555'}},y:{ticks:{callback:function(v){ return minsToDecimal(v)+'h'; },color:'#555'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
-    charts.pie=new Chart(document.getElementById('chart-pie'),{type:'doughnut',data:{labels:CATS.map(function(c){ return c.label; }),datasets:[{data:CATS.map(function(c){ return Math.round(avg[c.id]); }),backgroundColor:['#00c49a','#d63384','#d4a017'],borderWidth:0}]},options:{responsive:true,cutout:'55%',plugins:{tooltip:{backgroundColor:'rgba(15,15,15,0.95)',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,callbacks:{label:function(ctx){ return ctx.label+': '+minsToHours(ctx.parsed); }}},legend:{position:'bottom',labels:{boxWidth:8,padding:10,font:{size:10},color:'#888'}}}}});
+    charts.pie=new Chart(document.getElementById('chart-pie'),{type:'doughnut',data:{labels:CATS.map(function(c){ return c.label; }),datasets:[{data:CATS.map(function(c){ return Math.round(avg[c.id]); }),backgroundColor:CATS.map(function(c){ return c.color; }),borderWidth:0}]},options:{responsive:true,cutout:'55%',plugins:{tooltip:{backgroundColor:'rgba(15,15,15,0.95)',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,callbacks:{label:function(ctx){ return ctx.label+': '+minsToHours(ctx.parsed); }}},legend:{position:'bottom',labels:{boxWidth:8,padding:10,font:{size:10},color:'#888'}}}}});
     var radarAim=CATS.map(function(c){ return Math.round(entries.reduce(function(s,k){ return s+((db[k].aims&&db[k].aims[c.id])||0); },0)/n); });
     charts.radar=new Chart(document.getElementById('chart-radar'),{type:'radar',data:{labels:CATS.map(function(c){ return c.label; }),datasets:[{label:'Actual',data:CATS.map(function(c){ return Math.round(avg[c.id]); }),borderColor:'#00c49a',backgroundColor:'rgba(0,196,154,0.1)',pointBackgroundColor:'#00c49a'},{label:'Aim',data:radarAim,borderColor:'rgba(255,255,255,0.2)',backgroundColor:'rgba(255,255,255,0.03)',pointBackgroundColor:'rgba(255,255,255,0.3)'}]},options:{responsive:true,plugins:{tooltip:{backgroundColor:'rgba(15,15,15,0.95)',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,callbacks:{label:function(ctx){ return ctx.dataset.label+': '+minsToHours(ctx.parsed.r); }}},legend:{position:'bottom',labels:{boxWidth:8,padding:10,font:{size:10},color:'#888'}}},scales:{r:{grid:{color:'rgba(255,255,255,0.07)'},angleLines:{color:'rgba(255,255,255,0.07)'},pointLabels:{font:{size:10},color:'#666'},ticks:{display:false}}}}});
     charts.aimbar=new Chart(document.getElementById('chart-aimbar'),{type:'bar',data:{labels:labels,datasets:[{label:'Actual',data:dataTotal,backgroundColor:'#00c49a',borderRadius:4},{label:'Aim',data:dataTotalAim,backgroundColor:'rgba(255,255,255,0.05)',borderColor:'rgba(255,255,255,0.2)',borderWidth:1,borderRadius:4}]},options:{responsive:true,plugins:{tooltip:tt,legend:{labels:{boxWidth:8,padding:10,color:'#888'}}},scales:{x:{grid:{display:false},ticks:{color:'#555'}},y:{ticks:{callback:function(v){ return minsToDecimal(v)+'h'; },color:'#555'},grid:{color:'rgba(255,255,255,0.05)'}}}}});
@@ -1318,7 +1458,21 @@ function renderCompare(){
 }
 
 function getWeekRange(){ var d=new Date(),day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1),mon=new Date(d); mon.setDate(diff); var sun=new Date(mon); sun.setDate(mon.getDate()+6); var fmt=function(dt){ return dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate()); }; return{start:fmt(mon),end:fmt(sun)}; }
-function buildCSV(keys){ var csv='Date,Day,Active Circuit Aim (h),Active Circuit Actual (h),Closed Loop Aim (h),Closed Loop Actual (h),Career Aim (h),Career Actual (h),Total Aim (h),Total Actual (h)\n'; keys.forEach(function(k){ var d=db[k],date=new Date(k+'T12:00:00'),tAim=CATS.reduce(function(s,c){ return s+((d.aims&&d.aims[c.id])||0); },0),tAct=CATS.reduce(function(s,c){ return s+((d.actual&&d.actual[c.id])||0); },0); csv+=k+','+WEEKDAYS[date.getDay()]+','+minsToDecimal((d.aims&&d.aims.dayStudy)||0)+','+minsToDecimal((d.actual&&d.actual.dayStudy)||0)+','+minsToDecimal((d.aims&&d.aims.eveningStudy)||0)+','+minsToDecimal((d.actual&&d.actual.eveningStudy)||0)+','+minsToDecimal((d.aims&&d.aims.career)||0)+','+minsToDecimal((d.actual&&d.actual.career)||0)+','+minsToDecimal(tAim)+','+minsToDecimal(tAct)+'\n'; }); return csv; }
+function buildCSV(keys){
+    var csv='Date,Day';
+    CATS.forEach(function(c){ csv+=','+c.label+' Aim (h),'+c.label+' Actual (h)'; });
+    csv+=',Total Aim (h),Total Actual (h)\n';
+    keys.forEach(function(k){
+        var d=db[k], date=new Date(k+'T12:00:00');
+        var tAim=CATS.reduce(function(s,c){ return s+((d.aims&&d.aims[c.id])||0); },0);
+        var tAct=CATS.reduce(function(s,c){ return s+((d.actual&&d.actual[c.id])||0); },0);
+        var row=k+','+WEEKDAYS[date.getDay()];
+        CATS.forEach(function(c){ row+=','+minsToDecimal((d.aims&&d.aims[c.id])||0)+','+minsToDecimal((d.actual&&d.actual[c.id])||0); });
+        row+=','+minsToDecimal(tAim)+','+minsToDecimal(tAct)+'\n';
+        csv+=row;
+    });
+    return csv;
+}
 function download(name,content,type){ var blob=new Blob([content],{type:type}),a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
 function exportWeekly(fmt){ var w=getWeekRange(),keys=Object.keys(db).filter(function(k){ return k>=w.start&&k<=w.end; }).sort(); if(fmt==='csv'){download('study-week-'+w.start+'.csv',buildCSV(keys),'text/csv');}else{var data={};keys.forEach(function(k){data[k]=db[k];});download('study-week-'+w.start+'.json',JSON.stringify(data,null,2),'application/json');} notify('Exported '+keys.length+' days'); }
 function exportAll(fmt){ var keys=Object.keys(db).sort(); if(fmt==='csv'){download('study-all-data.csv',buildCSV(keys),'text/csv');}else{download('study-all-data.json',JSON.stringify(db,null,2),'application/json');} notify('Exported all data'); }
@@ -1464,6 +1618,144 @@ window._mergeActivityLog = function(cloudLog) {
     localStorage.setItem(LOG_KEY, JSON.stringify({date: today, entries: activityLog}));
     renderActivityLog();
 };
+
+/* ── CATEGORY MANAGEMENT (add / delete / recolor / rename / per-day schedule) ── */
+
+// Builds the aim-card rows dynamically so they always match the current category list
+function renderAimRows(){
+    var container=document.getElementById('aimStack');
+    if(!container) return;
+    var html='';
+    CATS.forEach(function(c){
+        html+='<div>';
+        html+='<div class="aim-row">';
+        html+='<div class="aim-dot" style="background:'+c.color+';"></div>';
+        html+='<div class="aim-row-label" id="aimLabel-'+c.id+'">'+escapeHtml(c.label)+'<span>'+catScheduleLabel(c)+'</span></div>';
+        html+='<div class="input-wrap" style="flex:1;"><input type="number" step="0.1" min="0" class="input" id="aim-'+c.id+'" placeholder="0" style="padding-right:40px;"><span class="input-suffix">hrs</span></div>';
+        html+='</div>';
+        html+='<div class="input-hint" id="aimHint-'+c.id+'" style="padding-left:18px;margin-top:2px;"></div>';
+        html+='</div>';
+    });
+    container.innerHTML=html;
+    CATS.forEach(function(c){ var el=document.getElementById('aim-'+c.id); if(el) el.addEventListener('input',function(){ updateAimHint(c.id); }); });
+}
+
+// Keeps the manual-session category dropdown (Export tab) in sync with current categories
+function populateManualCatSelect(){
+    var sel=document.getElementById('manualCat');
+    if(!sel) return;
+    var prev=sel.value;
+    sel.innerHTML='';
+    CATS.forEach(function(c){
+        var opt=document.createElement('option');
+        opt.value=c.id; opt.textContent=c.label;
+        sel.appendChild(opt);
+    });
+    if(CATS.some(function(c){ return c.id===prev; })) sel.value=prev;
+}
+
+// Renders the "Manage Categories" card: one editable block per category
+function renderCatManageList(){
+    var container=document.getElementById('catManageList');
+    if(!container) return;
+    var html='';
+    CATS.forEach(function(c){
+        html+='<div class="cat-manage-row" style="border:1px solid var(--border);border-radius:8px;padding:10px;">';
+        html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
+        html+='<input type="color" id="catEditColor-'+c.id+'" value="'+c.color+'" style="width:28px;height:28px;border:none;background:none;padding:0;cursor:pointer;flex-shrink:0;">';
+        html+='<input type="text" id="catEditName-'+c.id+'" class="input" style="font-size:12px;flex:1;" value="'+escapeHtml(c.label)+'" maxlength="24">';
+        html+='<button class="btn btn-ghost btn-sm" onclick="deleteCategory(\''+c.id+'\')" style="color:var(--red);white-space:nowrap;">Delete</button>';
+        html+='</div>';
+        html+='<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);margin-bottom:6px;cursor:pointer;">';
+        html+='<input type="checkbox" id="catEditAnytime-'+c.id+'" '+(c.anytime?'checked':'')+' onchange="document.getElementById(\'sch-block-'+c.id+'\').style.display=this.checked?\'none\':\'block\';">';
+        html+='Anytime (no auto-switch schedule — this category is only ever chosen manually)</label>';
+        html+='<div id="sch-block-'+c.id+'" style="display:'+(c.anytime?'none':'block')+';">';
+        html+='<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Auto-switch into this category on the checked days, during these times:</div>';
+        WEEKDAYS.forEach(function(wd,d){
+            var sch=c.schedule[d];
+            html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">';
+            html+='<input type="checkbox" id="sch-'+c.id+'-'+d+'-enabled" '+(sch.enabled?'checked':'')+'>';
+            html+='<span style="font-size:11px;color:var(--text2);width:34px;">'+wd.slice(0,3)+'</span>';
+            html+='<input type="time" id="sch-'+c.id+'-'+d+'-start" value="'+sch.start+'" class="input" style="font-size:11px;padding:4px 6px;width:90px;">';
+            html+='<span style="font-size:10px;color:var(--text3);">to</span>';
+            html+='<input type="time" id="sch-'+c.id+'-'+d+'-end" value="'+sch.end+'" class="input" style="font-size:11px;padding:4px 6px;width:90px;">';
+            if(d===0) html+='<button class="btn btn-ghost btn-sm" style="padding:3px 8px;font-size:9px;" onclick="copyScheduleToAllDays(\''+c.id+'\',0)">Copy to all days</button>';
+            html+='</div>';
+        });
+        html+='</div>';
+        html+='</div>';
+    });
+    container.innerHTML=html;
+}
+
+// Copies one day's time range to every day for a category (still needs Save Categories to persist)
+function copyScheduleToAllDays(catId, sourceDay){
+    var stEl=document.getElementById('sch-'+catId+'-'+sourceDay+'-start');
+    var enEl=document.getElementById('sch-'+catId+'-'+sourceDay+'-end');
+    if(!stEl||!enEl) return;
+    for(var d=0; d<7; d++){
+        var chk=document.getElementById('sch-'+catId+'-'+d+'-enabled');
+        var s=document.getElementById('sch-'+catId+'-'+d+'-start');
+        var e=document.getElementById('sch-'+catId+'-'+d+'-end');
+        if(chk) chk.checked=true;
+        if(s) s.value=stEl.value;
+        if(e) e.value=enEl.value;
+    }
+    notify('Copied to all days — click Save Categories to apply');
+}
+
+// Re-renders everything that depends on the category list after add/delete/save
+function onCategoriesChanged(){
+    renderCatManageList();
+    renderAimRows();
+    loadAims();
+    renderCatBtns();
+    applyTheme(currentCat);
+    renderProgress();
+    populateManualCatSelect();
+}
+
+function addCategory(){
+    var id='cat_'+Date.now().toString(36);
+    CATS.push({ id:id, label:'New Category', color:'#8888ff', anytime:true, schedule:buildSchedule('09:00','18:00',[]) });
+    saveCategories();
+    onCategoriesChanged();
+    notify('Category added — edit its name, colour, and schedule below');
+}
+
+function deleteCategory(id){
+    if(CATS.length<=1){ notify('You need at least one category.'); return; }
+    if(running && currentCat===id){ notify('Stop the timer before deleting the active category.'); return; }
+    if(!confirm('Delete this category? Past logged data stays in your history, but this category will no longer be selectable.')) return;
+    var idx=CATS.findIndex(function(c){ return c.id===id; });
+    if(idx>=0) CATS.splice(idx,1);
+    if(currentCat===id) currentCat=CATS[0].id;
+    saveCategories();
+    onCategoriesChanged();
+    notify('Category deleted');
+}
+
+function saveCategoryEdits(){
+    CATS.forEach(function(c){
+        var nameEl=document.getElementById('catEditName-'+c.id);
+        var colorEl=document.getElementById('catEditColor-'+c.id);
+        var anytimeEl=document.getElementById('catEditAnytime-'+c.id);
+        if(nameEl && nameEl.value.trim()) c.label=nameEl.value.trim();
+        if(colorEl && colorEl.value) c.color=colorEl.value;
+        if(anytimeEl) c.anytime=anytimeEl.checked;
+        for(var d=0; d<7; d++){
+            var chk=document.getElementById('sch-'+c.id+'-'+d+'-enabled');
+            var s=document.getElementById('sch-'+c.id+'-'+d+'-start');
+            var e=document.getElementById('sch-'+c.id+'-'+d+'-end');
+            if(chk) c.schedule[d].enabled=chk.checked;
+            if(s && s.value) c.schedule[d].start=s.value;
+            if(e && e.value) c.schedule[d].end=e.value;
+        }
+    });
+    saveCategories();
+    onCategoriesChanged();
+    notify('Categories saved');
+}
 
 /* ── MANUAL SESSION ── */
 function applyManualSession() {
@@ -1646,7 +1938,7 @@ tick = function() {
     var now = Date.now();
     var gap = now - lastTickTime;
     lastTickTime = now;
-    if (running && gap > SLEEP_THRESHOLD_MS) {
+    if (running && !paused && gap > SLEEP_THRESHOLD_MS) {
         clearInterval(interval);
         running = false;
         var minsToSave = Math.round(elapsedMs / 60000);
@@ -1672,7 +1964,7 @@ tick = function() {
 
 // Also catch wakeup via visibilitychange (tab switch or screen unlock)
 document.addEventListener('visibilitychange', function() {
-    if (document.visibilityState === 'visible' && running) {
+    if (document.visibilityState === 'visible' && running && !paused) {
         var gap = Date.now() - lastTickTime;
         if (gap > SLEEP_THRESHOLD_MS) {
             clearInterval(interval);
@@ -1700,11 +1992,11 @@ document.addEventListener('visibilitychange', function() {
 
 function init(){
     loadDB(); updateHeaderClock(); setInterval(updateHeaderClock,1000);
-    loadAims(); renderCatBtns(); applyTheme(currentCat); renderProgress(); updateStreak(); buildDaySelector();
+    renderAimRows(); loadAims(); renderCatBtns(); applyTheme(currentCat); renderProgress(); updateStreak(); buildDaySelector();
+    renderCatManageList(); populateManualCatSelect();
     loadActivityLog(); renderActivityLog();
-    CATS.forEach(function(c){ var el=document.getElementById('aim-'+c.id); if(el)el.addEventListener('input',function(){ updateAimHint(c.id); }); });
     setInterval(function(){
-        if(!running){ var auto=getAutoCat(); if(auto!==currentCat){ currentCat=auto; renderCatBtns(); applyTheme(auto); var cat=CATS.find(function(c){return c.id===auto;}); if(cat) sendNotif('Category switched','Now in '+cat.label); addLogEntry('notif','Auto-switched to '+(cat?cat.label:auto)); } }
+        checkCatSwitch();
         checkMidnightLogReset();
     },60000);
     // Request notification permission early so timer-complete notifs work

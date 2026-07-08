@@ -1,4 +1,5 @@
-const CACHE_NAME = 'study-savvy-v2';
+// BUILD: 34 — bump this number on every deploy to force SW update on all devices
+const CACHE_NAME = 'study-savvy-v34';
 
 // Only cache heavy static third-party assets
 const STATIC_ASSETS = [
@@ -17,18 +18,18 @@ function shouldNeverCache(url) {
   return NEVER_CACHE.some(function(f) { return url.endsWith(f); });
 }
 
-// Install: pre-cache only static third-party assets
+// Install: pre-cache only static third-party assets, skip waiting immediately
 self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
       return cache.addAll(STATIC_ASSETS);
     }).then(function() {
-      return self.skipWaiting();
+      return self.skipWaiting(); // activate immediately, don't wait for old SW to die
     })
   );
 });
 
-// Activate: delete old caches immediately
+// Activate: delete ALL old caches and take control of all clients immediately
 self.addEventListener('activate', function(event) {
   event.waitUntil(
     caches.keys().then(function(keys) {
@@ -37,19 +38,18 @@ self.addEventListener('activate', function(event) {
             .map(function(key) { return caches.delete(key); })
       );
     }).then(function() {
-      return self.clients.claim();
+      return self.clients.claim(); // take over all open tabs immediately
     })
   );
 });
 
 // Fetch strategy:
-// - index.html, manifest, sw.js: always network, fall back to cache only if offline
-// - everything else: cache first
+// - index.html, manifest, sw.js: always network first, cache only as offline fallback
+// - everything else: cache first for speed
 self.addEventListener('fetch', function(event) {
   var url = event.request.url;
 
   if (shouldNeverCache(url)) {
-    // Network first, cache as offline fallback only
     event.respondWith(
       fetch(event.request).then(function(response) {
         var clone = response.clone();
