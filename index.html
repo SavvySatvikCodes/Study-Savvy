@@ -527,7 +527,8 @@
                 <div id="aimBody">
                     <!-- Aim rows are now generated dynamically by renderAimRows() so they match whatever categories exist -->
                     <div class="aim-stack" id="aimStack"></div>
-                    <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">
+                        <button class="btn btn-ghost btn-sm" onclick="applyDefaultGoalsToday()">Use Defaults</button>
                         <button class="btn btn-accent btn-sm" onclick="saveAims()">Save Aims</button>
                     </div>
                 </div>
@@ -616,7 +617,7 @@
             <div class="summary-grid" id="summaryGrid"></div>
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;">Last updated: <strong style="color:var(--text2);">2026-07-07 — Build 34</strong></span>
+                <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;">Last updated: <strong style="color:var(--text2);">2026-07-07 — Build 35</strong></span>
             </div>
         </div>
         <div class="card export-card">
@@ -957,11 +958,19 @@ function buildSchedule(start, end, enabledDays) {
     return sch;
 }
 
+// Default daily goal (minutes) per day of week — used to auto-fill aims when a new day starts
+function buildGoalSchedule(hours) {
+    var mins = Math.round((hours || 0) * 60);
+    var g = {};
+    for (var d = 0; d < 7; d++) { g[d] = mins; }
+    return g;
+}
+
 function defaultCategories() {
     return [
-        { id: 'dayStudy',     label: 'Day Study',     color: '#00c49a', anytime: false, schedule: buildSchedule('09:00','18:00',[0,1,2,3,4,5,6]) },
-        { id: 'eveningStudy', label: 'Evening Study', color: '#d63384', anytime: false, schedule: buildSchedule('18:00','23:59',[0,1,2,3,4,5,6]) },
-        { id: 'career',       label: 'Career Work',   color: '#d4a017', anytime: true,  schedule: buildSchedule('09:00','18:00',[]) }
+        { id: 'dayStudy',     label: 'Day Study',     color: '#00c49a', anytime: false, schedule: buildSchedule('09:00','18:00',[0,1,2,3,4,5,6]), defaultGoal: buildGoalSchedule(0) },
+        { id: 'eveningStudy', label: 'Evening Study', color: '#d63384', anytime: false, schedule: buildSchedule('18:00','23:59',[0,1,2,3,4,5,6]), defaultGoal: buildGoalSchedule(0) },
+        { id: 'career',       label: 'Career Work',   color: '#d4a017', anytime: true,  schedule: buildSchedule('09:00','18:00',[]), defaultGoal: buildGoalSchedule(0) }
     ];
 }
 
@@ -975,6 +984,8 @@ function loadCategories() {
                 for (var d = 0; d < 7; d++) { if (!c.schedule[d]) c.schedule[d] = { enabled:false, start:'09:00', end:'18:00' }; }
                 if (typeof c.anytime !== 'boolean') c.anytime = false;
                 if (!c.color) c.color = '#00c49a';
+                if (!c.defaultGoal) c.defaultGoal = buildGoalSchedule(0);
+                for (var g = 0; g < 7; g++) { if (typeof c.defaultGoal[g] !== 'number') c.defaultGoal[g] = 0; }
             });
             return saved;
         }
@@ -1019,7 +1030,8 @@ function getTodayKey(){ const d=new Date(); return d.getFullYear()+'-'+pad2(d.ge
 function getOrCreate(k){
     if(!db[k]){
         var aims={}, actual={};
-        CATS.forEach(function(c){ aims[c.id]=0; actual[c.id]=0; });
+        var dow=new Date(k+'T12:00:00').getDay();
+        CATS.forEach(function(c){ aims[c.id]=(c.defaultGoal&&c.defaultGoal[dow])||0; actual[c.id]=0; });
         db[k]={aims:aims,actual:actual,sessions:[]};
     }
     return db[k];
@@ -1102,10 +1114,9 @@ function toggleAims(){ aimOpen=!aimOpen; document.getElementById('aimBody').styl
 
 function loadAims(){
     var today=getTodayKey();
-    if(db[today]){
-        var a=db[today].aims||{};
-        CATS.forEach(function(c){ var v=a[c.id]||0; document.getElementById('aim-'+c.id).value=v?minsToDecimal(v):''; updateAimHint(c.id); });
-    }
+    var day=getOrCreate(today); // creates today's entry with default goals prefilled if it doesn't exist yet
+    var a=day.aims||{};
+    CATS.forEach(function(c){ var v=a[c.id]||0; document.getElementById('aim-'+c.id).value=v?minsToDecimal(v):''; updateAimHint(c.id); });
 }
 
 function updateAimHint(catId){ var v=document.getElementById('aim-'+catId).value; document.getElementById('aimHint-'+catId).textContent=(v&&parseFloat(v)>0)?'= '+hoursToMins(v)+' mins':''; }
@@ -1114,6 +1125,15 @@ function saveAims(){
     var today=getTodayKey(); var day=getOrCreate(today);
     CATS.forEach(function(c){ day.aims[c.id]=hoursToMins(document.getElementById('aim-'+c.id).value); });
     saveDB(); notify('Aims saved'); renderProgress();
+}
+
+// Pulls each category's default goal for today's weekday into today's aims (overwrites whatever is there)
+function applyDefaultGoalsToday(){
+    var today=getTodayKey(); var day=getOrCreate(today);
+    var dow=new Date().getDay();
+    CATS.forEach(function(c){ day.aims[c.id]=(c.defaultGoal&&c.defaultGoal[dow])||0; });
+    saveDB(); loadAims(); renderProgress();
+    notify('Default goals applied to today');
 }
 
 function renderCatBtns(){
@@ -1683,9 +1703,31 @@ function renderCatManageList(){
             html+='</div>';
         });
         html+='</div>';
+        html+='<div style="font-size:10px;color:var(--text3);margin:10px 0 4px;">Default daily goal (hrs) — auto-fills the aim when a new day starts:</div>';
+        html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;">';
+        WEEKDAYS.forEach(function(wd,d){
+            var goalHrs=minsToDecimal(c.defaultGoal[d]||0);
+            html+='<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">';
+            html+='<span style="font-size:9px;color:var(--text3);">'+wd.slice(0,3)+'</span>';
+            html+='<input type="number" step="0.1" min="0" id="goal-'+c.id+'-'+d+'" value="'+goalHrs+'" class="input" style="width:50px;font-size:11px;padding:4px;text-align:center;">';
+            html+='</div>';
+        });
+        html+='<button class="btn btn-ghost btn-sm" style="padding:3px 8px;font-size:9px;" onclick="copyGoalToAllDays(\''+c.id+'\',0)">Copy to all days</button>';
+        html+='</div>';
         html+='</div>';
     });
     container.innerHTML=html;
+}
+
+// Copies one day's default-goal hours to every day for a category (still needs Save Categories to persist)
+function copyGoalToAllDays(catId, sourceDay){
+    var srcEl=document.getElementById('goal-'+catId+'-'+sourceDay);
+    if(!srcEl) return;
+    for(var d=0; d<7; d++){
+        var el=document.getElementById('goal-'+catId+'-'+d);
+        if(el) el.value=srcEl.value;
+    }
+    notify('Copied to all days — click Save Categories to apply');
 }
 
 // Copies one day's time range to every day for a category (still needs Save Categories to persist)
@@ -1717,7 +1759,7 @@ function onCategoriesChanged(){
 
 function addCategory(){
     var id='cat_'+Date.now().toString(36);
-    CATS.push({ id:id, label:'New Category', color:'#8888ff', anytime:true, schedule:buildSchedule('09:00','18:00',[]) });
+    CATS.push({ id:id, label:'New Category', color:'#8888ff', anytime:true, schedule:buildSchedule('09:00','18:00',[]), defaultGoal:buildGoalSchedule(0) });
     saveCategories();
     onCategoriesChanged();
     notify('Category added — edit its name, colour, and schedule below');
@@ -1750,6 +1792,8 @@ function saveCategoryEdits(){
             if(chk) c.schedule[d].enabled=chk.checked;
             if(s && s.value) c.schedule[d].start=s.value;
             if(e && e.value) c.schedule[d].end=e.value;
+            var goalEl=document.getElementById('goal-'+c.id+'-'+d);
+            if(goalEl) c.defaultGoal[d]=hoursToMins(goalEl.value);
         }
     });
     saveCategories();
