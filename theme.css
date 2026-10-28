@@ -472,3 +472,9 @@ html[data-glass="full"] .header, html[data-glass="full"] .tabs {
 .ap-opt { height: 64px; border: 1px solid var(--line2); border-radius: 4px; cursor: pointer; position: relative; background: #0b0c0f; color: var(--text2);
     font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; display: flex; align-items: flex-end; padding: 6px 8px; }
 .ap-opt.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--text); }
+
+/* Front Campus photo (University College). Darkened so panels stay readable. */
+html[data-bg="campus"] body::before {
+    background-image: linear-gradient(180deg, rgba(8,9,12,.55) 0%, rgba(8,9,12,.72) 45%, rgba(8,9,12,.9) 100%), url('campus.webp');
+    background-size: cover; background-position: center 30%;
+}

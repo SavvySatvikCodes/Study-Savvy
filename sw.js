@@ -1,5 +1,5 @@
-// BUILD: 38 — bump this number on every deploy to force SW update on all devices
-const CACHE_NAME = 'study-savvy-v38';
+// BUILD: 39 — bump this number on every deploy to force SW update on all devices
+const CACHE_NAME = 'study-savvy-v39';
 
 // Only cache heavy static third-party assets
 const STATIC_ASSETS = [

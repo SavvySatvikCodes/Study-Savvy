@@ -962,6 +962,7 @@ const BGS = {
     track:   { name: 'Track',   css: 'linear-gradient(115deg,#0b0c0f 55%,#1d3b33 55% 62%,#0b0c0f 62% 65%,#16302a 65% 68%,#0b0c0f 68%)' },
     grid:    { name: 'Grid',    css: 'linear-gradient(#1c1e23 1px,transparent 1px) 0 0/12px 12px,linear-gradient(90deg,#1c1e23 1px,#0b0c0f 1px) 0 0/12px 12px' },
     aurora:  { name: 'Aurora',  css: 'radial-gradient(circle at 20% 20%,#1f4a40,transparent 60%),radial-gradient(circle at 90% 60%,#2e2350,#0b0c0f 70%)' },
+    campus:  { name: 'Front Campus', css: "url('campus-thumb.webp') center/cover" },
     plain:   { name: 'Plain',   css: '#0b0c0f' }
 };
 const GLASS = { off: 'Solid', lite: 'Glass', full: 'Frosted glass' };
