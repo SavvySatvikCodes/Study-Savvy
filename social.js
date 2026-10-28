@@ -954,6 +954,40 @@ function openPrivacyModal() {
     });
 }
 
+// ═════════ APPEARANCE (per device, saved in this browser) ═════════
+const AP_KEY = 'ss_appearance_v1';
+const BGS = {
+    carbon:  { name: 'Carbon',  css: 'repeating-linear-gradient(45deg,#1a1c21 0 2px,#0b0c0f 2px 7px)' },
+    checker: { name: 'Checker', css: 'repeating-conic-gradient(#1d1f24 0 25%,#0b0c0f 0 50%) 0 0/16px 16px' },
+    track:   { name: 'Track',   css: 'linear-gradient(115deg,#0b0c0f 55%,#1d3b33 55% 62%,#0b0c0f 62% 65%,#16302a 65% 68%,#0b0c0f 68%)' },
+    grid:    { name: 'Grid',    css: 'linear-gradient(#1c1e23 1px,transparent 1px) 0 0/12px 12px,linear-gradient(90deg,#1c1e23 1px,#0b0c0f 1px) 0 0/12px 12px' },
+    aurora:  { name: 'Aurora',  css: 'radial-gradient(circle at 20% 20%,#1f4a40,transparent 60%),radial-gradient(circle at 90% 60%,#2e2350,#0b0c0f 70%)' },
+    plain:   { name: 'Plain',   css: '#0b0c0f' }
+};
+const GLASS = { off: 'Solid', lite: 'Glass', full: 'Frosted glass' };
+function loadAp() { try { return Object.assign({ bg: 'carbon', glass: 'off' }, JSON.parse(localStorage.getItem(AP_KEY) || '{}')); } catch (e) { return { bg: 'carbon', glass: 'off' }; } }
+function applyAp(a) { document.documentElement.dataset.bg = a.bg; document.documentElement.dataset.glass = a.glass; }
+function saveAp(a) { try { localStorage.setItem(AP_KEY, JSON.stringify(a)); } catch (e) {} applyAp(a); renderApCard(); }
+function renderApCard() {
+    const panel = $('panel-export'); if (!panel) return;
+    let card = $('apCard');
+    if (!card) { card = document.createElement('div'); card.className = 'card export-card'; card.id = 'apCard'; panel.insertBefore(card, panel.firstChild); }
+    const a = loadAp();
+    card.innerHTML = '<div class="export-title">Appearance</div><div class="export-desc">Saved on this device only. Frosted glass looks best but uses the most battery and CPU.</div>' +
+        '<div class="section-label" style="margin-bottom:8px;">Background</div><div class="ap-grid">' +
+        Object.entries(BGS).map(([k, v]) => '<button class="ap-opt' + (a.bg === k ? ' on' : '') + '" data-ap-bg="' + k + '" style="background:' + v.css + '">' + v.name + '</button>').join('') + '</div>' +
+        '<div class="section-label" style="margin-bottom:8px;">Panels</div><div class="seg">' +
+        Object.entries(GLASS).map(([k, v]) => '<button class="' + (a.glass === k ? 'on' : '') + '" data-ap-glass="' + k + '">' + v + '</button>').join('') + '</div>';
+}
+document.addEventListener('click', (ev) => {
+    const t = ev.target.closest('[data-ap-bg],[data-ap-glass]'); if (!t) return;
+    const a = loadAp();
+    if (t.dataset.apBg) a.bg = t.dataset.apBg; else a.glass = t.dataset.apGlass;
+    saveAp(a);
+});
+applyAp(loadAp());
+renderApCard();
+
 // Called by switchTab('friends') in index.html
 window._renderFriends = function () { renderFriends(); };
 

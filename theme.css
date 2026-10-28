@@ -417,3 +417,58 @@ select.input { background-color: #0f1115; }
     .header-center h1 { font-size: 22px; }
     .header-center h1::before { display: none; }
 }
+
+/* ═════════ APPEARANCE: background styles + glass (set in Settings) ═════════
+   All backgrounds are static CSS (no images, no animation). */
+html[data-bg] body::before { opacity: 1; background-size: auto; transform: none; inset: 0; }
+html[data-bg="plain"] body::before { background-image: none; }
+html[data-bg="checker"] body::before {
+    inset: -60%;
+    background-image: repeating-conic-gradient(rgba(255,255,255,.035) 0 25%, transparent 0 50%);
+    background-size: 64px 64px;
+    transform: rotate(-24deg);
+    -webkit-mask: linear-gradient(115deg, transparent 20%, #000 55%, transparent 90%);
+            mask: linear-gradient(115deg, transparent 20%, #000 55%, transparent 90%);
+}
+html[data-bg="track"] body::before {
+    background-image:
+        linear-gradient(115deg, transparent 0 58%, color-mix(in srgb, var(--accent) 14%, transparent) 58% 63%, transparent 63% 65%, color-mix(in srgb, var(--accent) 9%, transparent) 65% 67%, transparent 67%),
+        radial-gradient(900px 500px at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%);
+}
+html[data-bg="grid"] body::before {
+    background-image:
+        linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 32px 32px;
+}
+html[data-bg="aurora"] body::before {
+    background-image:
+        radial-gradient(700px 420px at 12% 8%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+        radial-gradient(640px 420px at 92% 30%, rgba(176,124,255,.12), transparent 70%),
+        radial-gradient(800px 500px at 50% 110%, rgba(57,217,138,.08), transparent 70%);
+}
+
+/* Glass lite: translucent glossy panels, no blur (almost free) */
+html[data-glass="lite"] .card, html[data-glass="full"] .card,
+html[data-glass="lite"] .history-day-card, html[data-glass="full"] .history-day-card {
+    background:
+        linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,0) 38%),
+        rgba(22,24,30,.58);
+    border-color: rgba(255,255,255,.09);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+}
+html[data-glass="lite"] .progress-card, html[data-glass="full"] .progress-card,
+html[data-glass="lite"] .tw-row, html[data-glass="full"] .tw-row { background: rgba(10,11,14,.55); }
+html[data-glass="lite"] .header, html[data-glass="lite"] .tabs,
+html[data-glass="full"] .header, html[data-glass="full"] .tabs { background: rgba(12,13,17,.72); }
+/* Glass full: real frosted blur. Looks best, costs the most GPU/CPU */
+html[data-glass="full"] .card, html[data-glass="full"] .history-day-card,
+html[data-glass="full"] .header, html[data-glass="full"] .tabs {
+    backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+/* appearance picker */
+.ap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.ap-opt { height: 64px; border: 1px solid var(--line2); border-radius: 4px; cursor: pointer; position: relative; background: #0b0c0f; color: var(--text2);
+    font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; display: flex; align-items: flex-end; padding: 6px 8px; }
+.ap-opt.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--text); }
