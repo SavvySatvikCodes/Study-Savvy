@@ -213,10 +213,22 @@ function switchTab(id){
     document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active',t.dataset.tab===id); });
     document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('active'); });
     document.getElementById('panel-'+id).classList.add('active');
-    if(id==='history') renderHistory();
+    if(id==='history') { renderHistory(); if(histView==='weekday') renderCompare(); }
+    if(id==='today' && window._renderTodayHero) window._renderTodayHero();
     if(id==='compare') renderCompare();
     if(id==='export') renderSummary();
     if(id==='friends' && window._renderFriends) window._renderFriends();
+}
+
+// History tab has two views: day-by-day log, and the weekday comparison (old Compare tab)
+var histView = 'days';
+function setHistView(v){
+    histView = v;
+    document.querySelectorAll('#histSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.hv === v); });
+    document.getElementById('histDays').style.display = v === 'days' ? 'block' : 'none';
+    document.getElementById('panel-compare').style.display = v === 'weekday' ? 'block' : 'none';
+    document.getElementById('histTitle').innerHTML = v === 'days' ? 'Logbook<small>Every session, day by day.</small>' : 'Weekday analysis<small>How each day of the week stacks up.</small>';
+    if (v === 'weekday') { buildDaySelector(); renderCompare(); } else renderHistory();
 }
 
 function toggleAims(){ aimOpen=!aimOpen; document.getElementById('aimBody').style.display=aimOpen?'block':'none'; document.getElementById('aimChevron').classList.toggle('up',!aimOpen); }

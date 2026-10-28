@@ -19,6 +19,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="social.css">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="theme.css">
 </head>
 <body>
 
@@ -47,10 +49,10 @@
 
 <div class="tabs">
     <button class="tab active" data-tab="today" onclick="switchTab('today')">Today</button>
-    <button class="tab" data-tab="history" onclick="switchTab('history')">History</button>
-    <button class="tab" data-tab="compare" onclick="switchTab('compare')">Compare</button>
-    <button class="tab" data-tab="export" onclick="switchTab('export')">Export</button>
     <button class="tab" data-tab="friends" onclick="switchTab('friends')">Friends</button>
+    <button class="tab" data-tab="history" onclick="switchTab('history')">History</button>
+    <!-- Compare is now inside History: <button class="tab" data-tab="compare" onclick="switchTab('compare')">Compare</button> -->
+    <button class="tab" data-tab="export" onclick="switchTab('export')">Settings</button>
 </div>
 
 <div class="content">
@@ -63,6 +65,8 @@
 
     <!-- TODAY -->
     <div class="panel active" id="panel-today">
+        <!-- Profile card + friends quick view (filled by social.js) -->
+        <div class="hero" id="todayHero"></div>
         <div class="today-grid">
             <!-- Top left: Timer -->
             <div class="card timer-card">
@@ -155,11 +159,19 @@
         </div>
     </div>
 
-    <!-- HISTORY (sessions live here) -->
-    <div class="panel" id="panel-history"><div id="historyList"></div></div>
+    <!-- HISTORY (sessions live here) + COMPARE, combined into one tab -->
+    <div class="panel" id="panel-history">
+        <div class="hist-head">
+            <div class="hist-title" id="histTitle">Logbook<small>Every session, day by day.</small></div>
+            <div class="seg" id="histSeg">
+                <button class="on" data-hv="days" onclick="setHistView('days')">Days</button>
+                <button data-hv="weekday" onclick="setHistView('weekday')">By weekday</button>
+            </div>
+        </div>
+        <div id="histDays"><div id="historyList"></div></div>
 
     <!-- COMPARE -->
-    <div class="panel" id="panel-compare">
+    <div id="panel-compare" style="display:none;">
         <div class="compare-layout">
             <div>
                 <div class="section-label" style="margin-bottom:10px;">Day of Week</div>
@@ -167,6 +179,7 @@
             </div>
             <div id="compareContent"><div class="empty">Select a day to compare</div></div>
         </div>
+    </div>
     </div>
 
     <!-- FRIENDS (rendered by social.js) -->
@@ -220,7 +233,7 @@
             <div class="summary-grid" id="summaryGrid"></div>
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px;">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;">Last updated: <strong style="color:var(--text2);">2026-10-28 — Build 36</strong></span>
+                <span style="font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace;">Last updated: <strong style="color:var(--text2);">2026-10-28 — Build 37</strong></span>
             </div>
         </div>
         <div class="card export-card">

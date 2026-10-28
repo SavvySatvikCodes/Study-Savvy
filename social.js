@@ -103,7 +103,7 @@ function f1FlairSVG() {
     const id = 'f1x' + (f1Count++);
     const body = 'M11,25 L13,16 L28,14 L40,10 L52,9 L57,13 L61,16 L74,16 L82,14 L120,17 L148,22 L151,25 L140,27.5 L118,28.5 L38,28.5 L18,28.5 Z';
     return '<span class="flair-f1" title="simply lovely (author)">' +
-        '<svg viewBox="0 0 160 36" role="img" aria-label="simply lovely">' +
+        '<svg viewBox="-16 2 176 32" aria-hidden="true">' +
         '<defs>' +
             '<linearGradient id="' + id + 'b" x1="0" x2="1"><stop offset="0" stop-color="#0b1f4d"/><stop offset=".5" stop-color="#1b3a8f"/><stop offset="1" stop-color="#0b1f4d"/></linearGradient>' +
             '<linearGradient id="' + id + 'o" x1="0" x2="1"><stop offset="0" stop-color="#ff5a00"/><stop offset="1" stop-color="#ffb020"/></linearGradient>' +
@@ -123,14 +123,13 @@ function f1FlairSVG() {
         '<circle cx="66" cy="13" r="3.6" fill="#ffd21f"/>' +
         '<path d="M58,13 Q66,6 77,14" stroke="#0a0a0a" stroke-width="1.7" fill="none"/>' +
         // name on the body
-        '<text x="89" y="23.6" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="8.6" font-weight="700" font-style="italic" fill="#ffffff" letter-spacing=".2">simply lovely</text>' +
         // front wing
         '<rect x="136" y="28" width="22" height="3" rx="1" fill="url(#' + id + 'o)"/>' +
         '<rect x="154.5" y="23" width="3" height="8" rx="1" fill="#0b1f4d"/>' +
         // wheels
         '<g><circle cx="30" cy="27" r="8" fill="#111" stroke="#2c2c2c" stroke-width="1.5"/><g class="f1-wheel"><circle cx="30" cy="27" r="3.4" fill="#555"/><line x1="30" y1="23.6" x2="30" y2="30.4" stroke="#999" stroke-width="1"/></g></g>' +
         '<g><circle cx="126" cy="27" r="7" fill="#111" stroke="#2c2c2c" stroke-width="1.5"/><g class="f1-wheel"><circle cx="126" cy="27" r="3" fill="#555"/><line x1="126" y1="24" x2="126" y2="30" stroke="#999" stroke-width="1"/></g></g>' +
-        '</svg></span>';
+        '</svg><b>simply lovely</b></span>';
 }
 function flairHTML(f) {
     if (!f) return '';
@@ -468,7 +467,12 @@ setInterval(() => {
 onAuthStateChanged(auth, (user) => {
     S.authReady = true;
     S.user = user;
-    if (!user) { stopAllListeners(); S.profile = undefined; S.privacy = null; S.authMode = 'signin'; route(); return; }
+    if (!user) {
+        stopAllListeners(); S.profile = undefined; S.privacy = null; S.authMode = 'signin'; lastResults = [];
+        const fp = $('panel-friends'); if (fp) { fp.innerHTML = ''; fp.dataset.built = ''; }
+        const th = $('todayHero'); if (th) th.innerHTML = '';
+        route(); return;
+    }
     startUserListeners();
     route();
 });
@@ -559,43 +563,161 @@ function statVal(st, range) {
     if (range === 'streak') return st.streak || 0;
     return 0;
 }
-function liveText(st) {
-    if (!st || st === 'hidden' || !st.liveSince) return '';
+function liveMins(st) {
+    if (!st || st === 'hidden' || !st.liveSince) return -1;
     const age = Date.now() - st.liveSince;
-    if (age < 0 || age > 6 * 3600000) return '';
-    return '<span class="fr-live">Studying · ' + fmtMins(age / 60000) + '</span>';
+    if (age < 0 || age > 6 * 3600000) return -1;
+    return age / 60000;
+}
+function liveTag(st) {
+    const m = liveMins(st);
+    return m < 0 ? '' : '<span class="tw-tag live">On track ' + fmtMins(m) + '</span>';
+}
+
+// Everyone on your grid (you + accepted friends), sorted for a range
+function standings(range) {
+    const uid = S.user.uid;
+    const myStats = computeStats();
+    const rows = [{ uid: uid, p: S.profile, st: myStats, me: true }];
+    accepted().forEach(([, f]) => { const o = otherUid(f); rows.push({ uid: o, p: S.profiles[o], st: S.stats[o] }); });
+    rows.forEach(x => { x.v = statVal(x.st, range); x.live = liveMins(x.me ? myStats : x.st) >= 0; });
+    rows.sort((a, b) => (b.v == null ? -1 : b.v) - (a.v == null ? -1 : a.v));
+    return { rows: rows, myStats: myStats };
+}
+
+function towerRow(x, pos, lead, range) {
+    const hidden = x.v == null;
+    const name = x.p ? (x.p.displayName || x.p.username) : '…';
+    const fmt = (v) => range === 'streak' ? v + (v === 1 ? ' day' : ' days') : fmtMins(v);
+    let right;
+    if (hidden) right = '<span class="tw-tag priv">' + (x.st === undefined ? 'Loading' : 'Private') + '</span>';
+    else right = '<b>' + fmt(x.v) + '</b>' + (pos === 1 ? '<small class="lead">Leader</small>' : '<small>+' + fmt(lead - x.v) + '</small>');
+    return '<div class="tw-row' + (x.me ? ' me' : '') + (pos === 1 ? ' p1' : '') + (hidden ? ' hidden' : '') + '">' +
+        '<div class="tw-pos">' + (hidden ? '-' : pos) + '</div>' +
+        '<div class="tw-team" style="background:' + avatarColor(x.uid) + '"></div>' +
+        '<div class="tw-name"><b>' + esc(name) + '</b>' + (x.me ? '<span class="tw-you">You</span>' : '') + (x.p ? flairHTML(x.p.flair) : '') + liveTag(x.me ? computeStats() : x.st) + '</div>' +
+        '<div class="tw-time">' + right + '</div></div>';
+}
+function towerHTML(rows, range, max) {
+    const vis = rows.filter(x => x.v != null);
+    const lead = vis.length ? vis[0].v : 0;
+    const out = [];
+    let pos = 0, meShown = false;
+    rows.forEach(x => {
+        const p = x.v == null ? 0 : ++pos;
+        if (!max || out.length < max) { out.push(towerRow(x, p, lead, range)); if (x.me) meShown = true; }
+        else if (x.me && !meShown) { out.push(towerRow(x, p, lead, range)); meShown = true; }
+    });
+    return '<div class="tower">' + out.join('') + '</div>';
+}
+
+// ═════════ TODAY: driver card + grid quick view ═════════
+// last 7 days as a strip of slanted bars (today highlighted)
+function sparkHTML(last7) {
+    const max = Math.max(60, ...last7.map(x => x.m));
+    return '<div class="spark">' + last7.map((x, i) => {
+        const d = new Date(x.d + 'T12:00:00');
+        const h = Math.max(4, Math.round((x.m / max) * 100));
+        return '<div class="spark-col' + (i === 6 ? ' now' : '') + '" title="' + esc(d.toDateString()) + ': ' + fmtMins(x.m) + '"><div class="spark-bar"><i style="height:' + h + '%"></i></div><span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span></div>';
+    }).join('') + '</div>';
+}
+function renderTodayHero() {
+    const el = $('todayHero');
+    if (!el || !S.user || !S.profile) return;
+    const me = S.profile, uid = S.user.uid;
+    const { rows, myStats } = standings('today');
+    const vis = rows.filter(r => r.v != null);
+    const myPos = vis.findIndex(r => r.me) + 1;
+    const solo = vis.length <= 1;
+    const liveCount = rows.filter(r => r.live && !r.me).length;
+    const inc = incoming().length;
+    const driver =
+        '<div class="card driver" data-pos="' + (solo ? '' : 'P' + myPos) + '">' +
+            '<div class="driver-badge" style="background:' + avatarColor(uid) + '">' + initial(me) + '</div>' +
+            '<div style="min-width:0;"><div class="driver-name">' + esc(me.displayName || me.username) + ' ' + flairHTML(me.flair) + '</div>' +
+            '<div class="driver-user">@' + esc(me.username) + ' ' + liveTag(myStats) + '</div></div>' +
+            sparkHTML(myStats.last7) +
+            '<div class="driver-stats">' +
+                '<div class="driver-stat"><b>' + fmtMins(myStats.today) + '</b><span>Today</span></div>' +
+                '<div class="driver-stat"><b>' + fmtMins(myStats.week) + '</b><span>This week</span></div>' +
+                '<div class="driver-stat hl"><b>' + myStats.streak + 'd</b><span>Streak</span></div>' +
+                '<div class="driver-stat"><b>' + (solo ? 'Solo' : 'P' + myPos + '<small style="font-size:15px;color:var(--text3)">/' + vis.length + '</small>') + '</b><span>Today\'s grid</span></div>' +
+            '</div></div>';
+    const grid =
+        '<div class="card"><div class="card-title" style="justify-content:space-between;"><span>Today\'s grid</span>' +
+            (liveCount ? '<span class="tw-tag live">' + liveCount + ' on track</span>' : '') + '</div>' +
+            (accepted().length ? towerHTML(rows, 'today', 5)
+                : '<div class="tw-note" style="padding:6px 0 4px;">Nobody on your grid yet. Add friends by username to race them for study hours.</div>') +
+            '<div class="tw-more"><span class="tw-note">' + (inc ? inc + ' friend request' + (inc > 1 ? 's' : '') + ' waiting' : '') + '</span>' +
+            '<button class="btn btn-ghost btn-sm" onclick="switchTab(\'friends\')">' + (accepted().length ? 'Full standings' : 'Find friends') + '</button></div>' +
+        '</div>';
+    el.innerHTML = driver + grid;
+}
+window._renderTodayHero = function () { renderTodayHero(); };
+// keeps the "on track" minutes fresh without re-rendering anything else
+setInterval(() => { const p = $('panel-today'); if (p && p.classList.contains('active')) renderTodayHero(); }, 60000);
+
+// ═════════ FRIENDS PAGE ═════════
+// Built once; later updates only touch the inner sections, so the search box
+// is never replaced while someone is typing in it.
+function ensureFriendsSkeleton(panel) {
+    if (panel.dataset.built === '1') return;
+    panel.innerHTML =
+        '<div class="fr-grid">' +
+        '<div class="card fr-full" id="frMe"></div>' +
+        '<div class="card" id="frBoard"></div>' +
+        '<div class="card" id="frChartCard"></div>' +
+        '<div class="card"><div class="card-title">Find friends</div>' +
+            '<form class="fr-search" id="frSearchForm" autocomplete="off"><input class="input" id="frSearch" placeholder="Search by username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="search"><button class="btn btn-accent btn-sm" type="submit">Search</button></form>' +
+            '<div class="fr-list" id="frResults" style="margin-top:8px;"></div></div>' +
+        '<div class="card" id="frReq"></div>' +
+        '<div class="card fr-full" id="frList"></div>' +
+        '</div>';
+    panel.dataset.built = '1';
+    const s = $('frSearch');
+    s.addEventListener('input', () => runSearch(s.value, false));
+    $('frSearchForm').addEventListener('submit', (e) => { e.preventDefault(); runSearch(s.value, true); });
 }
 
 function renderFriends() {
+    if (!S.user || !S.profile) return;
+    renderTodayHero();
+    updateTabBadge();
     const panel = $('panel-friends');
-    if (!panel || !S.user || !S.profile) return;
-    if (!panel.classList.contains('active')) { updateTabBadge(); return; }
+    if (!panel || !panel.classList.contains('active')) return;
+    ensureFriendsSkeleton(panel);
     const me = S.profile, uid = S.user.uid;
-    const myStats = computeStats();
     const priv = S.privacy || { mode: 'all' };
     const privLabel = { all: 'All friends can see your time', selected: 'Only friends you pick can see your time', none: 'Your time is hidden from everyone' }[priv.mode] || '';
-
-    // leaderboard rows
-    const rows = [{ uid: uid, p: me, st: myStats, me: true }];
-    accepted().forEach(([, f]) => { const o = otherUid(f); rows.push({ uid: o, p: S.profiles[o], st: S.stats[o] }); });
     const r = S.lbRange;
-    rows.forEach(x => { x.v = statVal(x.st, r); });
-    rows.sort((a, b) => (b.v == null ? -1 : b.v) - (a.v == null ? -1 : a.v));
-    const maxV = Math.max(1, ...rows.map(x => x.v || 0));
-    let rank = 0;
-    const lb = rows.map(x => {
-        const hidden = x.v == null;
-        if (!hidden) rank++;
-        const valTxt = hidden ? '<span class="lb-hidden">' + (x.st === undefined ? '…' : 'private') + '</span>' : (r === 'streak' ? x.v + 'd' : fmtMins(x.v));
-        return '<div class="lb-row' + (x.me ? ' me' : '') + '"><div class="lb-rank' + (!hidden && rank <= 3 ? ' top' : '') + '">' + (hidden ? '·' : rank) + '</div>' +
-            '<div style="display:flex;gap:10px;align-items:center;min-width:0;">' + avatarHTML(x.p, x.uid, true) + '<div style="min-width:0;flex:1;">' +
-            '<div class="fr-name" style="font-size:13px;">' + esc(x.p ? (x.p.displayName || x.p.username) : '…') + (x.me ? ' <span class="fr-badge">you</span>' : '') + ' ' + (x.p ? flairHTML(x.p.flair) : '') + ' ' + liveText(x.me ? myStats : x.st) + '</div>' +
-            (hidden ? '' : '<div class="lb-bar"><div style="width:' + Math.round((x.v / maxV) * 100) + '%;background:' + avatarColor(x.uid) + '"></div></div>') +
-            '</div></div><div class="lb-time">' + valTxt + '</div></div>';
-    }).join('');
+    const { rows, myStats } = standings(r);
+
+    $('frMe').innerHTML = '<div class="fr-me">' +
+        '<div class="driver-badge" style="width:56px;height:56px;font-size:30px;background:' + avatarColor(uid) + '">' + initial(me) + '</div>' +
+        '<div><div class="driver-name" style="font-size:26px;">' + esc(me.displayName || me.username) + ' ' + flairHTML(me.flair) + '</div><div class="driver-user">@' + esc(me.username) + '</div><div class="ss-hint" style="margin-top:4px;">' + esc(privLabel) + '</div></div>' +
+        '<div class="fr-actions"><button class="btn btn-ghost btn-sm" data-fr="editProfile">Edit profile</button><button class="btn btn-ghost btn-sm" data-fr="privacy">Privacy</button><button class="btn btn-ghost btn-sm" data-fr="tour">Tour</button><button class="btn btn-ghost btn-sm" data-fr="signout">Sign out</button></div>' +
+        '</div>';
+
+    $('frBoard').innerHTML = '<div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>Standings</span><div class="fr-seg">' +
+        ['today', 'week', 'month', 'streak'].map(k => '<button class="' + (r === k ? 'on' : '') + '" data-fr="range" data-r="' + k + '">' + { today: 'Today', week: 'Week', month: 'Month', streak: 'Streak' }[k] + '</button>').join('') +
+        '</div></div>' + towerHTML(rows, r, 0) +
+        (accepted().length ? '' : '<div class="tw-note" style="margin-top:10px;">Add friends to fill the grid.</div>');
+
+    const visibleFriends = accepted().map(([, f]) => otherUid(f)).filter(o => S.stats[o] && S.stats[o] !== 'hidden');
+    if (S.compareUid && !visibleFriends.includes(S.compareUid)) S.compareUid = null;
+    if (!S.compareUid && visibleFriends.length) S.compareUid = visibleFriends[0];
+    $('frChartCard').innerHTML = '<div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>Head to head · 7 days</span>' +
+        (visibleFriends.length ? '<select class="input" id="frCompareSel" style="width:auto;font-size:12px;padding:4px 8px;">' + visibleFriends.map(o => '<option value="' + esc(o) + '"' + (o === S.compareUid ? ' selected' : '') + '>vs @' + esc(S.profiles[o] ? S.profiles[o].username : '…') + '</option>').join('') + '</select>' : '') +
+        '</div>' + (visibleFriends.length ? '<div style="position:relative;height:210px;"><canvas id="frChart"></canvas></div>' : '<div class="tw-note">When a friend shares their time with you, you can compare the last 7 days here.</div>');
+    const sel = $('frCompareSel');
+    if (sel) sel.addEventListener('change', () => { S.compareUid = sel.value; drawCompareChart(myStats); });
+    drawCompareChart(myStats);
 
     const inc = incoming().map(([id, f]) => { const o = f.from; return '<div class="fr-item">' + avatarHTML(S.profiles[o], o, true) + '<div class="fr-item-main">' + nameLine(S.profiles[o], o) + '</div><div class="fr-actions" style="margin-left:auto;width:auto;"><button class="btn btn-accent btn-sm" data-fr="accept" data-id="' + esc(id) + '">Accept</button><button class="btn btn-ghost btn-sm" data-fr="decline" data-id="' + esc(id) + '">Decline</button></div></div>'; }).join('');
     const out = outgoing().map(([id, f]) => { const o = f.to; return '<div class="fr-item">' + avatarHTML(S.profiles[o], o, true) + '<div class="fr-item-main">' + nameLine(S.profiles[o], o) + '</div><div class="fr-actions" style="margin-left:auto;width:auto;"><span class="fr-badge">Pending</span><button class="btn btn-ghost btn-sm" data-fr="cancel" data-id="' + esc(id) + '">Cancel</button></div></div>'; }).join('');
+    $('frReq').innerHTML = '<div class="card-title">Requests' + (incoming().length ? '<span class="fr-count">' + incoming().length + '</span>' : '') + '</div>' +
+        (inc || out ? '<div class="fr-list">' + inc + out + '</div>' : '<div class="tw-note">No pending requests.</div>');
+
     const fl = accepted().map(([id, f]) => {
         const o = otherUid(f);
         const sees = canSeeMe(o);
@@ -606,50 +728,10 @@ function renderFriends() {
             '<label class="sw-wrap" title="' + (dis ? 'Your privacy is set to No one' : 'Let this friend see your study time') + '">Sees my time <span class="sw"><input type="checkbox" data-fr="toggle" data-uid="' + esc(o) + '"' + (sees ? ' checked' : '') + (dis ? ' disabled' : '') + '><span></span></span></label>' +
             '<button class="btn btn-ghost btn-sm" data-fr="remove" data-id="' + esc(id) + '" data-name="' + esc(S.profiles[o] ? S.profiles[o].username : '') + '">Remove</button></div></div>';
     }).join('');
+    $('frList').innerHTML = '<div class="card-title">Friends (' + accepted().length + ')</div>' +
+        (fl ? '<div class="fr-list">' + fl + '</div>' : '<div class="tw-note">No friends yet. Search for a username above.</div>');
 
-    const visibleFriends = accepted().map(([, f]) => otherUid(f)).filter(o => S.stats[o] && S.stats[o] !== 'hidden');
-    if (S.compareUid && !visibleFriends.includes(S.compareUid)) S.compareUid = null;
-    if (!S.compareUid && visibleFriends.length) S.compareUid = visibleFriends[0];
-
-    const activeEl = document.activeElement;
-    const searchVal = $('frSearch') ? $('frSearch').value : '';
-    const searchFocused = activeEl && activeEl.id === 'frSearch';
-
-    panel.innerHTML =
-        '<div class="fr-grid">' +
-        // me
-        '<div class="card fr-full"><div class="fr-me">' + avatarHTML(me, uid) +
-            '<div><div class="fr-name" style="font-size:16px;">' + esc(me.displayName || me.username) + ' ' + flairHTML(me.flair) + '</div><div class="fr-user">@' + esc(me.username) + '</div><div class="ss-hint" style="margin-top:4px;">' + esc(privLabel) + '</div></div>' +
-            '<div class="fr-actions"><button class="btn btn-ghost btn-sm" data-fr="editProfile">Edit profile</button><button class="btn btn-ghost btn-sm" data-fr="privacy">Privacy</button><button class="btn btn-ghost btn-sm" data-fr="tour">Tour</button><button class="btn btn-ghost btn-sm" data-fr="signout">Sign out</button></div>' +
-        '</div></div>' +
-        // leaderboard
-        '<div class="card"><div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>Leaderboard</span><div class="fr-seg">' +
-            ['today', 'week', 'month', 'streak'].map(k => '<button class="' + (r === k ? 'on' : '') + '" data-fr="range" data-r="' + k + '">' + { today: 'Today', week: 'Week', month: 'Month', streak: 'Streak' }[k] + '</button>').join('') +
-        '</div></div>' + lb + (accepted().length ? '' : '<div class="fr-empty">Add friends to see them here.</div>') + '</div>' +
-        // compare chart
-        '<div class="card"><div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:8px;"><span>Last 7 days</span>' +
-            (visibleFriends.length ? '<select class="input" id="frCompareSel" style="width:auto;font-size:11px;padding:4px 8px;">' + visibleFriends.map(o => '<option value="' + esc(o) + '"' + (o === S.compareUid ? ' selected' : '') + '>vs @' + esc(S.profiles[o] ? S.profiles[o].username : '…') + '</option>').join('') + '</select>' : '') +
-        '</div>' + (visibleFriends.length ? '<div style="position:relative;height:200px;"><canvas id="frChart"></canvas></div>' : '<div class="fr-empty">When a friend shares their time with you, you can compare the last 7 days here.</div>') + '</div>' +
-        // search
-        '<div class="card"><div class="card-title">Find friends</div>' +
-            '<input class="input" id="frSearch" placeholder="Search by username" autocomplete="off" autocapitalize="none" spellcheck="false" value="' + esc(searchVal) + '">' +
-            '<div class="fr-list" id="frResults" style="margin-top:6px;"></div></div>' +
-        // requests
-        '<div class="card"><div class="card-title">Requests' + (incoming().length ? '<span class="fr-count">' + incoming().length + '</span>' : '') + '</div>' +
-            (inc || out ? '<div class="fr-list">' + inc + out + '</div>' : '<div class="fr-empty">No pending requests.</div>') + '</div>' +
-        // friends
-        '<div class="card fr-full"><div class="card-title">Friends (' + accepted().length + ')</div>' +
-            (fl ? '<div class="fr-list">' + fl + '</div>' : '<div class="fr-empty">No friends yet. Search for a username above.</div>') + '</div>' +
-        '</div>';
-
-    const sEl = $('frSearch');
-    sEl.addEventListener('input', () => runSearch(sEl.value));
-    if (searchFocused) { sEl.focus(); sEl.setSelectionRange(sEl.value.length, sEl.value.length); }
-    if (searchVal) renderSearchResults();
-    const sel = $('frCompareSel');
-    if (sel) sel.addEventListener('change', () => { S.compareUid = sel.value; drawCompareChart(myStats); });
-    drawCompareChart(myStats);
-    updateTabBadge();
+    if (lastResults.length) renderSearchResults(); // refresh Add / Requested states
 }
 
 let compareChart = null;
@@ -660,40 +742,57 @@ function drawCompareChart(myStats) {
     const them = S.stats[S.compareUid];
     if (!them || them === 'hidden') return;
     const theirMap = {}; (them.last7 || []).forEach(x => { theirMap[x.d] = x.m; });
-    const labels = myStats.last7.map(x => new Date(x.d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }));
+    const labels = myStats.last7.map(x => new Date(x.d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase());
     const css = getComputedStyle(document.documentElement);
     const myCol = (css.getPropertyValue('--accent') || '#00c49a').trim();
     const p = S.profiles[S.compareUid];
+    const font = { family: "'Barlow Condensed', sans-serif", size: 13, weight: '600' };
     compareChart = new Chart(cv.getContext('2d'), {
         type: 'bar',
         data: { labels: labels, datasets: [
-            { label: 'You', data: myStats.last7.map(x => +(x.m / 60).toFixed(2)), backgroundColor: myCol, borderRadius: 4 },
-            { label: '@' + (p ? p.username : ''), data: myStats.last7.map(x => +((theirMap[x.d] || 0) / 60).toFixed(2)), backgroundColor: avatarColor(S.compareUid) + 'aa', borderRadius: 4 }
+            { label: 'YOU', data: myStats.last7.map(x => +(x.m / 60).toFixed(2)), backgroundColor: myCol, borderRadius: 0, barPercentage: .8, categoryPercentage: .7 },
+            { label: '@' + (p ? p.username : '').toUpperCase(), data: myStats.last7.map(x => +((theirMap[x.d] || 0) / 60).toFixed(2)), backgroundColor: '#f2f1ec', borderRadius: 0, barPercentage: .8, categoryPercentage: .7 }
         ] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#c8c8c8', font: { size: 11 } } }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + fmtMins(c.raw * 60) } } },
-            scales: { x: { ticks: { color: '#787878' }, grid: { display: false } }, y: { ticks: { color: '#787878', callback: (v) => v + 'h' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true } } }
+        options: { responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { labels: { color: '#b9bcc4', font: font, boxWidth: 10 } }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + fmtMins(c.raw * 60) } } },
+            scales: { x: { ticks: { color: '#737885', font: font }, grid: { display: false } }, y: { ticks: { color: '#737885', font: font, callback: (v) => v + 'h' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true } } }
     });
 }
 
 // ── search ──
-let searchTimer = null, lastResults = [];
-function runSearch(v) {
+let searchTimer = null, lastResults = [], searchSeq = 0;
+function runSearch(v, now) {
     clearTimeout(searchTimer);
-    const q = (v || '').trim().toLowerCase().replace(/^@/, '');
-    if (q.length < 2) { lastResults = []; renderSearchResults(q.length ? 'Type at least 2 characters.' : ''); return; }
+    const q = (v || '').trim().toLowerCase().replace(/^@/, '').replace(/\s+/g, '');
+    if (q.length < 2) { searchSeq++; lastResults = []; renderSearchResults(q.length ? 'Type at least 2 characters.' : ''); return; }
+    const seq = ++searchSeq;
+    renderSearchResults('Searching…');
     searchTimer = setTimeout(async () => {
         try {
-            const qs = await getDocs(query(collection(fs, 'profiles'), orderBy('username'), startAt(q), endAt(q + ''), limit(10)));
-            lastResults = [];
-            qs.forEach(d => { if (d.id !== S.user.uid) lastResults.push({ uid: d.id, p: d.data() }); });
-            renderSearchResults(lastResults.length ? '' : 'No users found.');
-        } catch (e) { console.warn(e); renderSearchResults('Search failed.'); }
-    }, 300);
+            const [qs, exact] = await Promise.all([
+                getDocs(query(collection(fs, 'profiles'), orderBy('username'), startAt(q), endAt(q + ''), limit(10))),
+                getDoc(doc(fs, 'usernames', q)).catch(() => null)
+            ]);
+            if (seq !== searchSeq) return; // a newer search is running
+            const found = new Map();
+            qs.forEach(d => { if (d.id !== S.user.uid) found.set(d.id, d.data()); });
+            if (exact && exact.exists()) {
+                const xu = exact.data().uid;
+                if (xu !== S.user.uid && !found.has(xu)) { const ps = await getDoc(doc(fs, 'profiles', xu)); if (ps.exists()) found.set(xu, ps.data()); }
+            }
+            lastResults = Array.from(found, ([uid, p]) => ({ uid: uid, p: p }));
+            renderSearchResults(lastResults.length ? '' : 'Nobody with a username starting with "' + q + '".');
+        } catch (e) {
+            console.warn('search failed', e);
+            if (seq === searchSeq) renderSearchResults('Search failed (' + (e.code || e.message) + '). Check your connection and try again.');
+        }
+    }, now ? 0 : 350);
 }
 function renderSearchResults(msg) {
     const el = $('frResults');
     if (!el) return;
-    if (msg !== undefined && msg) { el.innerHTML = '<div class="fr-empty">' + esc(msg) + '</div>'; return; }
+    if (msg) { el.innerHTML = '<div class="tw-note" style="padding:6px 0;">' + esc(msg) + '</div>'; return; }
+    if (msg === '') { el.innerHTML = ''; if (!lastResults.length) return; }
     el.innerHTML = lastResults.map(x => {
         const f = S.friendships[pairId(S.user.uid, x.uid)];
         let act;
