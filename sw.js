@@ -1,5 +1,5 @@
-// BUILD: 35 — bump this number on every deploy to force SW update on all devices
-const CACHE_NAME = 'study-savvy-v35';
+// BUILD: 36 — bump this number on every deploy to force SW update on all devices
+const CACHE_NAME = 'study-savvy-v36';
 
 // Only cache heavy static third-party assets
 const STATIC_ASSETS = [
@@ -12,6 +12,11 @@ const NEVER_CACHE = [
   'index.html',
   'manifest.json',
   'sw.js',
+  'app.js',
+  'firebase.js',
+  'social.js',
+  'styles.css',
+  'social.css',
 ];
 
 function shouldNeverCache(url) {

@@ -1,0 +1,127 @@
+rules_version = '2';
+// Study Savvy Firestore security rules.
+// Paste into Firebase console > Firestore Database > Rules, then Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── helpers ──
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    // Username accounts have no real email, so social writes only need a signed-in user.
+    function verified() { return signedIn(); }
+    // The author check still requires Google's verified email.
+    function isAuthor() {
+      return signedIn() && request.auth.token.email_verified == true
+        && request.auth.token.email == 'satvik.garg29@gmail.com';
+    }
+    function pairId(a, b) { return a < b ? a + '_' + b : b + '_' + a; }
+    function friendDoc(other) {
+      return /databases/$(database)/documents/friendships/$(pairId(request.auth.uid, other));
+    }
+    function isFriend(other) {
+      return exists(friendDoc(other)) && get(friendDoc(other)).data.status == 'accepted';
+    }
+    function sharesWithMe(owner) {
+      let p = get(/databases/$(database)/documents/privacy/$(owner)).data;
+      return (p.mode == 'all' && !(request.auth.uid in p.block))
+          || (p.mode == 'selected' && request.auth.uid in p.allow);
+    }
+    function validFlair(f) {
+      return f is map
+        && f.keys().hasOnly(['text', 'color'])
+        && f.text is string && f.text.size() <= 24
+        && (
+          (f.color in ['grey','red','orange','yellow','green','teal','blue','purple','pink']
+            && (f.text.trim().lower() != 'simply lovely' || isAuthor()))
+          || (f.color == 'f1' && isAuthor())
+        );
+    }
+
+    // ── private tracker data: only the owner, ever ──
+    match /users/{uid}    { allow read, write: if isOwner(uid); }
+    match /logs/{uid}     { allow read, write: if isOwner(uid); }
+    match /sessions/{uid} { allow read, write: if isOwner(uid); }
+
+    // ── usernames: unique handles, one per account ──
+    match /usernames/{name} {
+      allow get: if true;  // lets the sign-up screen check if a username is free
+      allow list: if false;
+      allow create: if verified()
+        && name.matches('^[a-z0-9_.]{3,20}$')
+        && !(name in ['admin','administrator','studysavvy','study.savvy','support','moderator','root'])
+        && (name != 'savvysatvik' || isAuthor())
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username == name;
+      allow update: if false;
+      allow delete: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username != name;
+    }
+
+    // ── public profile: username, display name, flair (never email) ──
+    match /profiles/{uid} {
+      allow get: if signedIn();
+      allow list: if signedIn() && request.query.limit <= 20;
+      allow create, update: if isOwner(uid) && verified()
+        && request.resource.data.keys().hasOnly(['username','displayName','flair','createdAt','updatedAt'])
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('^[a-z0-9_.]{3,20}$')
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 40
+        && validFlair(request.resource.data.flair);
+      allow delete: if false;
+    }
+
+    // ── privacy settings: owner only ──
+    match /privacy/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['mode','allow','block','showLive'])
+        && request.resource.data.mode in ['all','selected','none']
+        && request.resource.data.allow is list && request.resource.data.allow.size() <= 500
+        && request.resource.data.block is list && request.resource.data.block.size() <= 500
+        && request.resource.data.showLive is bool;
+    }
+
+    // ── shared totals: owner, or accepted friends the owner shares with ──
+    match /stats/{uid} {
+      allow read: if isOwner(uid) || (signedIn() && isFriend(uid) && sharesWithMe(uid));
+      allow write: if isOwner(uid) && verified()
+        && request.resource.data.keys().hasOnly(['dayKey','weekKey','monthKey','today','week','month','total','streak','last7','liveSince','updatedAt'])
+        && request.resource.data.today is int && request.resource.data.today >= 0 && request.resource.data.today <= 1440
+        && request.resource.data.week is int && request.resource.data.week >= 0 && request.resource.data.week <= 10080
+        && request.resource.data.month is int && request.resource.data.month >= 0 && request.resource.data.month <= 44640
+        && request.resource.data.total is int && request.resource.data.total >= 0
+        && request.resource.data.streak is int && request.resource.data.streak >= 0
+        && request.resource.data.last7 is list && request.resource.data.last7.size() <= 7;
+    }
+
+    // ── friendships: id is the two uids sorted and joined with "_" ──
+    match /friendships/{fid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.users;
+      allow create: if verified()
+        && request.resource.data.keys().hasOnly(['users','from','to','status','createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string
+        && request.resource.data.to != request.auth.uid
+        && fid == pairId(request.auth.uid, request.resource.data.to)
+        && request.resource.data.users.size() == 2
+        && request.resource.data.users.hasAll([request.auth.uid, request.resource.data.to])
+        && request.resource.data.status == 'pending'
+        && exists(/databases/$(database)/documents/profiles/$(request.resource.data.to))
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid));
+      allow update: if signedIn()
+        && resource.data.status == 'pending'
+        && resource.data.to == request.auth.uid
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','acceptedAt']);
+      allow delete: if signedIn() && request.auth.uid in resource.data.users;
+    }
+
+    // everything else is closed
+    match /{document=**} { allow read, write: if false; }
+  }
+}
