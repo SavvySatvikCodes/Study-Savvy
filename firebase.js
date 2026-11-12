@@ -40,7 +40,8 @@ window._fireSave = function(dbData) {
     clearTimeout(syncTimeout);
     syncTimeout = setTimeout(async function() {
         try {
-            await setDoc(doc(db_fire, 'users', currentUser.uid), { data: JSON.stringify(dbData) });
+            // categories ride along in the same doc so they sync across devices
+            await setDoc(doc(db_fire, 'users', currentUser.uid), { data: JSON.stringify(dbData), cats: JSON.stringify(window._getCats ? window._getCats() : []) });
         } catch(e) {
             console.warn('Firestore save failed:', e);
         }
@@ -141,6 +142,10 @@ onAuthStateChanged(auth, function(user) {
             if (snap.exists()) {
                 try {
                     var cloudData = JSON.parse(snap.data().data || '{}');
+                    // apply cloud categories (skip if this device edited them in the last few seconds)
+                    if (snap.data().cats && window._setCats && Date.now() - (window._catsEditedAt || 0) > 5000) {
+                        try { window._setCats(JSON.parse(snap.data().cats)); } catch(e) { console.warn('cats parse error', e); }
+                    }
                     var local = window._getDB ? window._getDB() : {};
                     var merged = Object.assign({}, cloudData);
                     Object.keys(local).forEach(function(k) {

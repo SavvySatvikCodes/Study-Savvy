@@ -109,8 +109,19 @@ function loadCategories() {
 
 function saveCategories() {
     localStorage.setItem(CATEGORIES_KEY, JSON.stringify(CATS));
+    window._catsEditedAt = Date.now();
     if (window._fireSave) window._fireSave(db);
 }
+// Replace categories with the cloud copy (called by firebase.js on snapshot)
+window._setCats = function(list) {
+    if (!Array.isArray(list) || !list.length) return;
+    if (JSON.stringify(list) === JSON.stringify(CATS)) return;
+    CATS.splice(0, CATS.length);
+    list.forEach(function(c) { CATS.push(c); });
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(CATS));
+    if (!running && !CATS.some(function(c) { return c.id === currentCat; })) currentCat = CATS[0].id;
+    onCategoriesChanged();
+};
 
 const CATS = loadCategories();
 const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
